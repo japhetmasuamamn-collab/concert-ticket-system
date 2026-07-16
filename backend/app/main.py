@@ -23,7 +23,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",                       # Ton frontend local (Vite)
+        
         "https://concert-ticket-system-2.onrender.com"  # Ton frontend de production
     ],
     allow_credentials=True,
