@@ -300,7 +300,7 @@ def obtenir_billet_public(code_unique: str, db: Session = Depends(get_db)):
     }
 
 # -------------------------------------------------------------
-# 1. ENDPOINT PUBLIC : Détails du billet par code unique (CORRIGÉ)
+# 1. ENDPOINT PUBLIC : Détails du billet par code unique (HARMONISÉ ET SÉCURISÉ)
 # -------------------------------------------------------------
 @app.get("/ticket/{code_unique}", response_class=HTMLResponse)
 def afficher_billet_html(code_unique: str, request: Request, db: Session = Depends(get_db)):
@@ -310,7 +310,26 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
 
     if not billet:
         return HTMLResponse(
-            "<h1>Billet introuvable</h1>",
+            """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Billet introuvable</title>
+                <style>
+                    body { background-color: #0b0c10; color: #f5f5f7; font-family: system-ui, sans-serif; text-align: center; padding-top: 100px; }
+                    .error-box { max-width: 400px; margin: auto; padding: 30px; background: #161b22; border: 1px solid #ef4444; border-radius: 12px; }
+                    h1 { color: #ef4444; font-size: 24px; }
+                </style>
+            </head>
+            <body>
+                <div class="error-box">
+                    <h1>⚠️ Billet Introuvable</h1>
+                    <p>Ce code de billet est invalide ou a été supprimé du système.</p>
+                </div>
+            </body>
+            </html>
+            """,
             status_code=404
         )
 
@@ -318,61 +337,264 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
     type_billet = billet.type_billet
     evenement = type_billet.evenement if type_billet else None
 
+    # Formatage de la date à la main en Python pour faire propre
+    date_str = "ÉVÉNEMENT"
+    if evenement and evenement.date_evenement:
+        try:
+            # Si c'est déjà un objet datetime
+            date_str = evenement.date_evenement.strftime('%d %B %Y').upper()
+        except AttributeError:
+            # Si c'est une chaîne de caractères
+            date_str = str(evenement.date_evenement).upper()
+
+    titre_evenement = evenement.titre if evenement else "ÉVÉNEMENT"
+    lieu_evenement = evenement.lieu_nom if evenement else "LIEU NON SPÉCIFIÉ"
+    nom_client = client.nom if client else "CLIENT ANONYME"
+    nom_type = type_billet.nom_type if type_billet else "STANDARD"
+    prix_ticket = f"{type_billet.prix} USD" if type_billet else "? USD"
+
+    # Encodage sécurisé du code unique pour l'API QR Code
+    import urllib.parse
+    code_encode = urllib.parse.quote(billet.code_unique)
+
     return f"""
     <!DOCTYPE html>
     <html lang="fr">
     <head>
         <meta charset="UTF-8">
-        <title>Billet électronique</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Billet Électronique - {titre_evenement}</title>
         <style>
             body {{
-                font-family: Arial, sans-serif;
-                background:#f4f4f4;
-                padding:40px;
+                background-color: #0b0c10;
+                color: #f5f5f7;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                box-sizing: border-box;
             }}
 
-            .ticket {{
-                max-width:600px;
-                margin:auto;
-                background:white;
-                border-radius:10px;
-                padding:25px;
-                box-shadow:0 0 15px rgba(0,0,0,.15);
+            .ticket-container {{
+                display: flex;
+                background-color: #ffffff;
+                color: #000000;
+                border-radius: 12px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                overflow: hidden;
+                border: 1px solid #d1d5db;
+                min-height: 250px;
+                max-width: 650px;
+                width: 100%;
             }}
 
-            h1 {{
-                color:#c62828;
+            .ticket-left {{
+                background-color: #111827;
+                color: #ffffff;
+                padding: 24px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                border-right: 2px dashed #e5e7eb;
+                position: relative;
+                width: 140px;
+                min-width: 140px;
+                text-align: center;
+                box-sizing: border-box;
             }}
 
-            p {{
-                font-size:18px;
+            .ticket-stamp {{
+                position: absolute;
+                top: 12px;
+                font-size: 8px;
+                letter-spacing: 1px;
+                color: #9ca3af;
+                font-weight: bold;
             }}
 
-            .code {{
-                margin-top:25px;
-                font-size:22px;
-                font-weight:bold;
-                color:#1976d2;
+            .ticket-value {{
+                font-size: 20px;
+                font-weight: 900;
+                letter-spacing: 1px;
+                color: #ef4444;
+                text-transform: uppercase;
             }}
+
+            .ticket-price {{
+                font-size: 24px;
+                font-weight: bold;
+                margin-top: 6px;
+            }}
+
+            .ticket-right {{
+                flex: 1;
+                padding: 20px 24px;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+                position: relative;
+                gap: 10px;
+                box-sizing: border-box;
+                background-color: #ffffff;
+            }}
+
+            .ticket-header {{
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }}
+
+            .ticket-event {{
+                font-size: 18px;
+                font-weight: 800;
+                letter-spacing: 0.5px;
+                color: #111827;
+                margin-right: 100px; /* Évite de chevaucher le QR code */
+            }}
+
+            .ticket-date {{
+                font-size: 11px;
+                color: #ef4444;
+                font-weight: 700;
+                margin-top: 4px;
+            }}
+
+            .ticket-location {{
+                font-size: 11px;
+                color: #4b5563;
+                font-weight: 500;
+            }}
+
+            .ticket-details {{
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin: 10px 0;
+            }}
+
+            .ticket-meta {{
+                display: flex;
+                flex-direction: column;
+            }}
+
+            .meta-label {{
+                font-size: 9px;
+                color: #6b7280;
+                font-weight: bold;
+            }}
+
+            .meta-value {{
+                font-size: 14px;
+                font-weight: 700;
+                text-transform: uppercase;
+                color: #111827;
+            }}
+
+            .meta-value-code {{
+                font-size: 12px;
+                font-family: monospace;
+                color: #374151;
+                font-weight: bold;
+            }}
+
+            .qr-container {{
+                position: absolute;
+                right: 24px;
+                bottom: 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+            }}
+
+            .qr-image {{
+                width: 90px;
+                height: 90px;
+                border: 1px solid #e5e7eb;
+                padding: 4px;
+                border-radius: 4px;
+                background: white;
+            }}
+
+            .qr-tag {{
+                font-size: 8px;
+                font-weight: bold;
+                color: #10b981;
+                text-align: center;
+            }}
+
+            /* RESPONSIVE DESIGN POUR MOBILE */
+            @media (max-width: 600px) {
+                .ticket-container {{
+                    flex-direction: column;
+                }}
+                .ticket-left {{
+                    width: 100%;
+                    min-width: auto;
+                    border-right: none;
+                    border-bottom: 2px dashed #e5e7eb;
+                    padding: 20px;
+                }}
+                .ticket-right {{
+                    padding: 24px;
+                    padding-bottom: 140px; /* Place pour le QR code en bas */
+                }}
+                .ticket-event {{
+                    margin-right: 0;
+                }}
+                .qr-container {{
+                    position: relative;
+                    right: auto;
+                    bottom: auto;
+                    margin-top: 20px;
+                    align-self: center;
+                }}
+            }
         </style>
     </head>
-
     <body>
 
-        <div class="ticket">
+        <div class="ticket-container">
+            <!-- PARTIE GAUCHE -->
+            <div class="ticket-left">
+                <div class="ticket-stamp">ARTI-SYS SECURE</div>
+                <div class="ticket-value">{nom_type}</div>
+                <div class="ticket-price">{prix_ticket}</div>
+            </div>
 
-            <h1>{evenement.titre}</h1>
+            <!-- PARTIE DROITE -->
+            <div class="ticket-right">
+                <div class="ticket-header">
+                    <span class="ticket-event">{titre_evenement}</span>
+                    <span class="ticket-date">📅 {date_str}</span>
+                    <span class="ticket-location">📍 {lieu_event}</span>
+                </div>
+                
+                <div class="ticket-details">
+                    <div class="ticket-meta">
+                        <span class="meta-label">TITULAIRE :</span>
+                        <span class="meta-value">{nom_client}</span>
+                    </div>
+                    <div class="ticket-meta">
+                        <span class="meta-label">ID BILLET :</span>
+                        <span class="meta-value-code">{billet.code_unique}</span>
+                    </div>
+                </div>
 
-            <p><strong>Client :</strong> {client.nom}</p>
-
-            <p><strong>Type :</strong> {type_billet.nom_type}</p>
-
-            <p><strong>Date :</strong> {evenement.date_evenement}</p>
-
-            <p><strong>Lieu :</strong> {evenement.lieu_nom}</p>
-
-            <p class="code">{billet.code_unique}</p>
-
+                <!-- LE QR CODE EMBARQUÉ ET DYNAMIQUE -->
+                <div class="qr-container">
+                    <img 
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={code_encode}&color=000000" 
+                        alt="QR Code" 
+                        class="qr-image"
+                    />
+                    <div class="qr-tag">✓ SCAN UNIQUE</div>
+                </div>
+            </div>
         </div>
 
     </body>
