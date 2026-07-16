@@ -1,5 +1,6 @@
 # backend/app/main.py
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import JSONResponse  # <-- AJOUTE CETTE LIGNE
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -43,6 +44,9 @@ def read_root():
 # ==========================================================
 # ENDPOINT D'AUTHENTIFICATION (100% Dynamique & Sécurisé)
 # ==========================================================
+# ==========================================================
+# ENDPOINT D'AUTHENTIFICATION (CORRIGÉ & SÉCURISÉ)
+# ==========================================================
 @app.post("/api/auth/login", tags=["Authentification"])
 def login_agent(payload: LoginRequest, db: Session = Depends(get_db)):
     """
@@ -67,12 +71,17 @@ def login_agent(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Ce compte agent a été désactivé."
         )
 
-    return {
-        "status": "success",
-        "id": agent.id,
-        "nom": agent.nom,
-        "role": agent.role
-    }
+    # CORRECTION CRITIQUE : On force l'encapsulation de la réponse et le typage strict
+    # pour garantir que les en-têtes CORS soient injectés sans interférence de SQLAlchemy.
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "success",
+            "id": int(agent.id),
+            "nom": str(agent.nom),
+            "role": str(agent.role)
+        }
+    )
 
 
 # ==========================================================
