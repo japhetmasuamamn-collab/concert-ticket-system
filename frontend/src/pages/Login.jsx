@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Phone, Lock, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 import axios from 'axios';
-import VITE_API_URL from '../config'; // Importation de l'URL centralisée
+import API_BASE_URL from '../config'; // Importation de l'URL centralisée
 import logoCompany from '../assets/logo2.jpeg';
 
 const Login = () => {
@@ -20,7 +20,7 @@ const Login = () => {
 
     try {
       // Utilisation de l'URL centralisée
-      const response = await axios.post(`${VITE_API_URL}/api/auth/login`, {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
         telephone: telephone,
         mot_de_passe: password
       });
