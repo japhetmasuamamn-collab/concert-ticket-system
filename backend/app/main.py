@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from datetime import datetime
+from fastapi.responses import HTMLResponse
+from fastapi import Request
 
 from .database import engine, Base, get_db
 from . import models, schemas, crud
@@ -277,29 +279,82 @@ def obtenir_historique_actions(limit: int = 100, db: Session = Depends(get_db)):
 # -------------------------------------------------------------
 # 1. ENDPOINT PUBLIC : Détails du billet par code unique (CORRIGÉ)
 # -------------------------------------------------------------
-@app.get("/api/billets/public/{code_unique}")
-def obtenir_billet_public(code_unique: str, db: Session = Depends(get_db)):
-    # On cherche le billet dans la table de données par son code unique
-    billet = db.query(models.Billet).filter(models.Billet.code_unique == code_unique).first()
-    
+@app.get("/ticket/{code_unique}", response_class=HTMLResponse)
+def afficher_billet_html(code_unique: str, request: Request, db: Session = Depends(get_db)):
+    billet = db.query(models.Billet).filter(
+        models.Billet.code_unique == code_unique
+    ).first()
+
     if not billet:
-        raise HTTPException(status_code=404, detail="Billet introuvable")
-    
-    # On vérifie si un client est rattaché au billet pour éviter un bug si billet.client est None
-    nom_du_client = billet.client.nom if billet.client else "Client Inconnu"
-    
-    # On retourne les détails en utilisant la structure exacte de vos modèles
-    return {
-        "id": billet.id,
-        "code_unique": billet.code_unique,
-        "nom_client": nom_du_client,  # CORRIGÉ : On passe par la relation client
-        "type_billet": billet.type_billet.nom_type if billet.type_billet else "N/A",
-        "prix": billet.type_billet.prix if billet.type_billet else 0.0,
-        # CORRIGÉ : On cible les bons attributs de la table Evenement (titre, date_evenement, lieu_nom)
-        "evenement_titre": billet.type_billet.evenement.titre if (billet.type_billet and billet.type_billet.evenement) else "Événement sans titre",
-        "evenement_date": billet.type_billet.evenement.date_evenement if (billet.type_billet and billet.type_billet.evenement) else None,
-        "evenement_lieu": billet.type_billet.evenement.lieu_nom if (billet.type_billet and billet.type_billet.evenement) else "Lieu non défini"
-    }
+        return HTMLResponse(
+            "<h1>Billet introuvable</h1>",
+            status_code=404
+        )
+
+    client = billet.client
+    type_billet = billet.type_billet
+    evenement = type_billet.evenement if type_billet else None
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <title>Billet électronique</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background:#f4f4f4;
+                padding:40px;
+            }}
+
+            .ticket {{
+                max-width:600px;
+                margin:auto;
+                background:white;
+                border-radius:10px;
+                padding:25px;
+                box-shadow:0 0 15px rgba(0,0,0,.15);
+            }}
+
+            h1 {{
+                color:#c62828;
+            }}
+
+            p {{
+                font-size:18px;
+            }}
+
+            .code {{
+                margin-top:25px;
+                font-size:22px;
+                font-weight:bold;
+                color:#1976d2;
+            }}
+        </style>
+    </head>
+
+    <body>
+
+        <div class="ticket">
+
+            <h1>{evenement.titre}</h1>
+
+            <p><strong>Client :</strong> {client.nom}</p>
+
+            <p><strong>Type :</strong> {type_billet.nom_type}</p>
+
+            <p><strong>Date :</strong> {evenement.date_evenement}</p>
+
+            <p><strong>Lieu :</strong> {evenement.lieu_nom}</p>
+
+            <p class="code">{billet.code_unique}</p>
+
+        </div>
+
+    </body>
+    </html>
+    """
 
 # -------------------------------------------------------------
 # 2. ENDPOINT PUBLIC : Historique des scans / tracking du billet
