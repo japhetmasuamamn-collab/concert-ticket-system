@@ -21,8 +21,10 @@ app = FastAPI(
 # Configuration CORS pour autoriser ton frontend React
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "*"],
-    # allow_origins=["http://192.168.11.105", "*"],
+    allow_origins=[
+        "http://localhost:5173",                       # Ton frontend local (Vite)
+        "https://concert-ticket-system-2.onrender.com"  # Ton frontend de production
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
