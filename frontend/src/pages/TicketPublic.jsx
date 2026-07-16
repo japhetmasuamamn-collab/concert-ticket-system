@@ -1,71 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Calendar, MapPin, ShieldCheck, Loader2, AlertTriangle, Lock, Unlock, Eye } from 'lucide-react';
+import { Calendar, MapPin, Award, ShieldCheck, Loader2, AlertTriangle, Activity, CheckCircle2 } from 'lucide-react';
 import axios from 'axios';
-import API_BASE_URL from '../config';
+import API_BASE_URL from '../config'; // Utilise votre variable d'IP de l'API
 
 const TicketPublic = () => {
-  const { codeUnique } = useParams();
+  const { codeUnique } = useParams(); // Récupère le code_unique de l'URL
   const [ticketData, setTicketData] = useState(null);
+  const [trackingHistory, setTrackingHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // États de sécurité du QR Code
-  const [estJourJ, setEstJourJ] = useState(false);
-  const [dejaConsulte, setDejaConsulte] = useState(false);
-  const [qrVerrouille, setQrVerrouille] = useState(true);
 
   useEffect(() => {
     const chargerInfosTicket = async () => {
       setLoading(true);
       setError('');
       try {
+        // 1. Récupérer les détails du billet public
         const resBillet = await axios.get(`${API_BASE_URL}/api/billets/public/${codeUnique}`);
-        const billet = resBillet.data;
-        setTicketData(billet);
+        setTicketData(resBillet.data);
 
-        // --- MASQUAGE DE L'URL (MESURE DE SÉCURITÉ N°3) ---
-        // Dès que le billet est chargé avec succès dans l'état local (mémoire vive de React),
-        // on réécrit l'URL visible dans la barre d'adresse pour camoufler le code unique.
-        // L'historique du navigateur est remplacé pour empêcher un retour arrière indiscret.
-        window.history.replaceState(null, '', '/ticket/secure-access');
-
-        // --- CALCULS DE SÉCURITÉ DU CADENAS ---
-        if (billet.evenement_date) {
-          const maintenant = new Date();
-          const dateEvenement = new Date(billet.evenement_date);
-
-          // On compare uniquement l'année, le mois et le jour
-          const estMemeJour = 
-            maintenant.getFullYear() === dateEvenement.getFullYear() &&
-            maintenant.getMonth() === dateEvenement.getMonth() &&
-            maintenant.getDate() === dateEvenement.getDate();
-          
-          // Vérifie si l'événement est aujourd'hui ou déjà passé
-          const estAujourdhuiOuPasse = estMemeJour || maintenant > dateEvenement;
-          setEstJourJ(estAujourdhuiOuPasse);
-
-          // Vérification du localStorage pour savoir si le client a déjà ouvert cette page auparavant
-          const cleVisite = `billet_vu_${codeUnique}`;
-          const aDejaVisite = localStorage.getItem(cleVisite) === 'true';
-          setDejaConsulte(aDejaVisite);
-
-          // LOGIQUE DU CADENAS :
-          // Le QR code est déverrouillé SI :
-          // C'est le jour J (ou après) OU s'il ne l'a ENCORE JAMAIS ouvert (Première visualisation unique autorisée)
-          if (estAujourdhuiOuPasse || !aDejaVisite) {
-            setQrVerrouille(false);
-            
-            // Si c'est sa toute première visite (hors jour J), on enregistre qu'il l'a vu
-            // Ainsi, s'il rafraîchit la page, le cadenas se refermera.
-            if (!estAujourdhuiOuPasse && !aDejaVisite) {
-              localStorage.setItem(cleVisite, 'true');
-            }
-          } else {
-            setQrVerrouille(true);
-          }
-        }
-
+        // 2. Récupérer l'historique du tracking de ce billet précis
+        const resTracking = await axios.get(`${API_BASE_URL}/api/billets/tracking/${resBillet.data.id}`);
+        setTrackingHistory(resTracking.data);
       } catch (err) {
         setError("Impossible de charger ce billet. Le code est peut-être invalide ou expiré.");
       } finally {
@@ -106,8 +63,9 @@ const TicketPublic = () => {
   return (
     <div style={styles.body}>
       <main style={styles.container}>
+        {/* EN-TÊTE DU BILLET */}
         <div style={styles.successHeader}>
-          <ShieldCheck size={28} color="#22c55e" />
+          <CheckCircle2 size={32} color="#22c55e" />
           <h3 style={styles.successTitle}>Billet Officiel Actif</h3>
         </div>
 
@@ -139,76 +97,50 @@ const TicketPublic = () => {
               </div>
               <div style={styles.ticketMeta}>
                 <span style={styles.metaLabel}>ID SÉCURISÉ :</span>
-                {/* On n'affiche pas le code unique brut en clair s'il est verrouillé */}
-                <span style={styles.metaValueCode}>
-                  {qrVerrouille ? "••••-••••-SECURE" : ticketData?.code_unique}
-                </span>
+                <span style={styles.metaValueCode}>{ticketData?.code_unique}</span>
               </div>
             </div>
 
-            {/* CONTENEUR DE SÉCURITÉ DU QR CODE */}
             <div style={styles.qrContainer}>
-              {qrVerrouille ? (
-                // --- DESIGN SI LE QR CODE EST VERROUILLÉ ---
-                <div style={styles.qrLockedBox}>
-                  <Lock size={24} color="#ef4444" />
-                  <span style={styles.qrLockedText}>Sécurisé</span>
-                </div>
-              ) : (
-                // --- DESIGN SI LE QR CODE EST DÉVERROUILLÉ ---
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(ticketData?.code_unique || '')}&color=000000`} 
-                  alt="QR Code" 
-                  style={styles.qrImage}
-                />
-              )}
-              
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(ticketData?.code_unique || '')}&color=000000`} 
+                alt="QR Code" 
+                style={styles.qrImage}
+              />
               <div style={styles.qrTag}>
-                {qrVerrouille ? (
-                  <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    <Lock size={10} /> CADENAS ACTIF
-                  </span>
-                ) : (
-                  <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    <Unlock size={10} /> SCAN UNIQUE
-                  </span>
-                )}
+                <ShieldCheck size={10} color="#22c55e" /> SCAN UNIQUE
               </div>
             </div>
           </div>
         </div>
 
-        {/* BANDEAU INFORMATIF SUR LA SÉCURITÉ DU TICKET */}
-        <div style={styles.securityBanner(qrVerrouille)}>
-          {qrVerrouille ? (
-            <>
-              <Lock size={18} style={{ marginRight: '8px', flexShrink: 0 }} />
-              <p style={{ margin: 0, fontSize: '12px' }}>
-                <strong>QR Code Verrouillé : </strong> 
-                {"Vous l'avez déjà visualisé une fois pour contrôle. Par mesure de sécurité anti-fraude, il se déverrouillera automatiquement le jour de l'événement ("}
-                <strong>{formatueDate(ticketData?.evenement_date).split(' à')[0]}</strong>
-                {")."}
-              </p>
-            </>
-          ) : (
-            <>
-              <Eye size={18} style={{ marginRight: '8px', flexShrink: 0 }} />
-              <p style={{ margin: 0, fontSize: '12px' }}>
-                {!estJourJ ? (
-                  <span>
-                    <strong>Première visualisation : </strong> 
-                    {"Attention, le QR code ne s'affiche qu'une fois avant le jour J pour vérification. Si vous quittez ou rafraîchissez cette page, il sera verrouillé jusqu'à l'événement."}
-                  </span>
-                ) : (
-                  <span>
-                    <strong>Jour J arrivé : </strong> 
-                    {"Votre QR code est déverrouillé et prêt à être scanné à l'entrée de l'événement."}
-                  </span>
-                )}
-              </p>
-            </>
-          )}
-        </div>
+        {/* MODULE DE SUIVI / TRACKING CLIENT
+        <div style={styles.trackingCard}>
+          <h4 style={styles.trackingTitle}>
+            <Activity size={18} style={{ color: '#ef4444', marginRight: '6px' }} />
+            Historique d'accès & Tracing
+          </h4>
+          <p style={styles.trackingSubtitle}>Chaque étape de vie de votre billet est enregistrée pour des raisons de sécurité.</p>
+
+          <div style={styles.timeline}>
+            {trackingHistory.length === 0 ? (
+              <p style={{ fontSize: '13px', color: '#8b949e' }}>Aucun mouvement enregistré pour le moment.</p>
+            ) : (
+              trackingHistory.map((track, index) => (
+                <div key={track.id} style={styles.timelineItem}>
+                  <div style={styles.timelineDot} />
+                  <div style={styles.timelineContent}>
+                    <div style={styles.timelineHeader}>
+                      <span style={styles.actionBadge(track.action)}>{track.action}</span>
+                      <span style={styles.timelineTime}>{formatueDate(track.cree_le)}</span>
+                    </div>
+                    <p style={styles.timelineDesc}>{track.description}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div> */}
       </main>
     </div>
   );
@@ -230,7 +162,7 @@ const styles = {
     maxWidth: '500px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '15px',
+    gap: '20px',
   },
   centerContainer: {
     backgroundColor: '#0b0c10',
@@ -258,6 +190,7 @@ const styles = {
     color: '#22c55e',
     margin: 0,
   },
+  // Reprise et adaptation Mobile du Ticket
   ticketContainer: {
     display: 'flex',
     backgroundColor: '#ffffff',
@@ -311,7 +244,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
-    paddingRight: '65px',
+    paddingRight: '65px', // Espace pour pas écraser le QR code
   },
   ticketEvent: {
     fontSize: '14px',
@@ -372,38 +305,91 @@ const styles = {
     padding: '2px',
     borderRadius: '4px',
   },
-  qrLockedBox: {
-    width: '65px',
-    height: '65px',
-    border: '1px solid #fca5a5',
-    backgroundColor: '#fef2f2',
-    borderRadius: '4px',
+  qrTag: {
+    fontSize: '6px',
+    fontWeight: 'bold',
+    color: '#10b981',
     display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
+    alignItems: 'center',
+    gap: '2px',
+  },
+  // STYLES TIMELINE DU TRACKING
+  trackingCard: {
+    backgroundColor: '#161b22',
+    border: '1px solid #30363d',
+    borderRadius: '12px',
+    padding: '20px',
+  },
+  trackingTitle: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    margin: '0 0 4px 0',
+    display: 'flex',
     alignItems: 'center',
   },
-  qrLockedText: {
-    fontSize: '8px',
-    fontWeight: 'bold',
-    color: '#ef4444',
-    marginTop: '2px',
-    textTransform: 'uppercase'
+  trackingSubtitle: {
+    fontSize: '12px',
+    color: '#8b949e',
+    margin: '0 0 20px 0',
   },
-  qrTag: {
-    fontSize: '7px',
-    fontWeight: 'bold',
-  },
-  securityBanner: (verrouille) => ({
+  timeline: {
     display: 'flex',
-    alignItems: 'flex-start',
-    backgroundColor: verrouille ? '#1f1315' : '#111b14',
-    border: `1px solid ${verrouille ? '#4c1d1f' : '#163e26'}`,
-    color: verrouille ? '#fca5a5' : '#86efac',
-    padding: '12px',
+    flexDirection: 'column',
+    gap: '16px',
+    position: 'relative',
+    paddingLeft: '10px',
+  },
+  timelineItem: {
+    display: 'flex',
+    gap: '12px',
+    position: 'relative',
+  },
+  timelineDot: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#ef4444',
+    marginTop: '6px',
+    flexShrink: 0,
+  },
+  timelineContent: {
+    flex: 1,
+    backgroundColor: '#0d1117',
+    border: '1px solid #21262d',
     borderRadius: '8px',
-    lineHeight: '1.4',
-  })
+    padding: '10px 12px',
+  },
+  timelineHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '4px',
+    marginBottom: '6px',
+  },
+  actionBadge: (action) => {
+    let color = '#ef4444';
+    if (action === 'VENTE') color = '#38bdf8';
+    if (action === 'SCAN_REUSSI') color = '#22c55e';
+    return {
+      backgroundColor: `${color}15`,
+      color: color,
+      border: `1px solid ${color}`,
+      fontSize: '9px',
+      fontWeight: 'bold',
+      padding: '2px 6px',
+      borderRadius: '4px',
+    };
+  },
+  timelineTime: {
+    fontSize: '10px',
+    color: '#8b949e',
+  },
+  timelineDesc: {
+    fontSize: '12px',
+    color: '#c9d1d9',
+    margin: 0,
+  }
 };
 
 export default TicketPublic;
