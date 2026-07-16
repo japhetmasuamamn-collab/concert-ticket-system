@@ -97,23 +97,18 @@ const Vente = () => {
   };
 
   // FONCTION DE GÉNÉRATION DU MESSAGE WHATSAPP DYNAMIQUE
+  // FONCTION DE GÉNÉRATION DU MESSAGE WHATSAPP DYNAMIQUE
   const redirigerVersWhatsApp = () => {
     if (!successData) return;
 
-    // Nettoyage du numéro de téléphone (Ex: enlever le 0 de tête et ajouter le code pays si besoin. Ici on assume que le numéro est bien formaté)
     let telephone = successData.telephone_client || "";
     
-    // Si le numéro commence par 0, on peut remplacer par l'indicatif de la RDC par exemple (243)
     if (telephone.startsWith('0')) {
       telephone = '243' + telephone.substring(1);
     }
 
-    // URL unique sécurisée qui pointe vers l'interface de visualisation du billet (le tracking)
-   // On récupère l'adresse de base du frontend actuel (ex: http://192.168.1.50:3000 ou le nom de domaine)
-    const baseFrontendUrl = window.location.origin; 
-
-    // URL dynamique qui s'adaptera automatiquement à l'adresse IP sur laquelle tourne l'application
-    const urlTrackingBillet = `${baseFrontendUrl}/ticket/${successData.code_unique}`;
+    // --- CORRECTION ICI : On force l'URL vers le serveur 1 (Backend FastAPI) ---
+    const urlTrackingBillet = `https://concert-ticket-system-1.onrender.com/ticket/${successData.code_unique}`;
 
     // Construction du message pré-rempli
     const message = `Bonjour *${successData.nom_client}*,\n\nVoici votre billet électronique pour l'événement *${successData.evenement_titre}* du ${formatueDate(successData.evenement_date)}.\n\n🎫 *Type de billet :* ${successData.type_billet}\n📍 *Lieu :* ${successData.evenement_lieu}\n\n🔗 *Accéder à votre billet électronique :*\n${urlTrackingBillet}\n\n⚠️ *CONSIGNE DE SÉCURITÉ :*\nConservez précieusement ce lien et ce billet. Ce billet comporte un scan unique. S'il est transféré ou partagé à un tiers, l'accès pourra vous être refusé lors de l'événement.\n\nMerci pour votre confiance !`;
