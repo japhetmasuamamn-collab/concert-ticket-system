@@ -1,0 +1,595 @@
+Backend
+cd concert-ticket-system
+cd backend
+.venv\Scripts\activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+Frontend
+cd concert-ticket-system
+cd frontend
+npm run dev
+npm run dev -- --host
+
+
+
+
+
+
+
+
+
+cd C:\Program Files\PostgreSQL\18\bin
+
+.\pg_dump.exe -U postgres -d university_erp -f C:\backup\university_erp_garder.sql
+
+Créer une base des données Classic_fret ensuite dans PSQL TOOL \i 'C:/backup/sauvegarde.sql'
+
+
+
+\i 'C:/backup/concert-ticket-system.sql'
+
+
+
+
+
+
+CREATE TABLE public.tickets_tracking (
+  id serial NOT NULL,
+  billet_id integer NULL, -- Nullable si le billet est supprimé de la DB mais qu'on veut garder une trace
+  action character varying(50) NOT NULL, -- Ex: 'VENTE', 'SCAN_REUSSI', 'SCAN_ECHEC_FRAUDE', 'ANNULATION'
+  description text NULL, -- Message ou détail de l'action
+  cree_par integer NULL, -- ID de l'utilisateur (agent/admin) qui a fait l'action
+  cree_le timestamp without time zone NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.tickets_tracking
+ADD CONSTRAINT tickets_tracking_pkey PRIMARY KEY (id);
+
+-- Clés étrangères pour maintenir l'intégrité référentielle
+ALTER TABLE public.tickets_tracking
+ADD CONSTRAINT fk_tracking_billet FOREIGN KEY (billet_id) REFERENCES public.billets(id) ON DELETE SET NULL;
+
+ALTER TABLE public.tickets_tracking
+ADD CONSTRAINT fk_tracking_utilisateur FOREIGN KEY (cree_par) REFERENCES public.utilisateurs(id) ON DELETE SET NULL;
+
+
+
+
+
+
+
+
+
+class TicketTracking(Base):
+    __tablename__ = "tickets_tracking"
+
+    id = Column(Integer, primary_key=True, index=True)
+    billet_id = Column(Integer, ForeignKey("billets.id", ondelete="SET NULL"), nullable=True)
+    action = Column(String(50), nullable=False, index=True) # Ex: "VENTE", "SCAN_REUSSI", "ECHEC_FRAUDE"
+    description = Column(Text, nullable=True)
+    cree_par = Column(Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True)
+    cree_le = Column(DateTime, default=obtenir_heure_locale)
+
+    # Relations
+    billet = relationship("Billet") # Permet de remonter facilement au billet concerné
+    operateur = relationship("Utilisateur") # Permet d'avoir les détails de l'agent
+
+
+
+
+
+
+
+# ==========================================
+# 7. SCHÉMAS POUR LE SUIVI DES TICKETS (TRACKING)
+# ==========================================
+
+class TicketTrackingCreate(BaseModel):
+    billet_id: Optional[int] = None
+    action: str = Field(..., max_length=50, description="Ex: VENTE, SCAN_REUSSI, FRAUDE, ETC.")
+    description: Optional[str] = None
+    cree_par: Optional[int] = None
+
+class TicketTrackingResponse(BaseModel):
+    id: int
+    billet_id: Optional[int]
+    action: str
+    description: Optional[str]
+    cree_par: Optional[int]
+    cree_le: datetime
+
+    class Config:
+        from_attributes = True
+
+
+
+
+
+
+
+
+
+
+def ajouter_tracking(db: Session, tracking: schemas.TicketTrackingCreate):
+    db_tracking = models.TicketTracking(
+        billet_id=tracking.billet_id,
+        action=tracking.action,
+        description=tracking.description,
+        cree_par=tracking.cree_par,
+        cree_le=datetime.now(tz_local)
+    )
+    db.add(db_tracking)
+    db.commit()
+    db.refresh(db_tracking)
+    return db_tracking
+
+
+
+
+# Dans crud.py -> effectuer_vente_billet :
+# ... après l'insertion du billet (db_billet) et avant le return ...
+
+# Enregistrement dans l'historique
+ajouter_tracking(db, schemas.TicketTrackingCreate(
+    billet_id=db_billet.id,
+    action="VENTE",
+    description=f"Billet vendu au client {db_client.nom} par l'agent ID {agent_id}",
+    cree_par=agent_id
+))
+
+
+
+
+
+
+# Dans crud.py -> scanner_et_valider_billet (Adapter la fonction pour accepter agent_id ou l'extraire) :
+
+# Pour le Cas B (Billet déjà scanné / Fraude)
+ajouter_tracking(db, schemas.TicketTrackingCreate(
+    billet_id=db_billet.id,
+    action="FRAUDE_RESCAN",
+    description=f"Tentative de scan d'un billet déjà validé par le client {nom_client}."
+))
+
+# Pour le Cas C (Scan Réussi)
+ajouter_tracking(db, schemas.TicketTrackingCreate(
+    billet_id=db_billet.id,
+    action="SCAN_REUSSI",
+    description=f"Billet scanné avec succès à l'entrée."
+))
+
+
+
+
+TICKET PUBLIC AU CAS OU  
+
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { Calendar, MapPin, Award, ShieldCheck, Loader2, AlertTriangle, Activity, CheckCircle2 } from 'lucide-react';
+import axios from 'axios';
+import API_BASE_URL from '../config'; // Utilise votre variable d'IP de l'API
+
+const TicketPublic = () => {
+  const { codeUnique } = useParams(); // Récupère le code_unique de l'URL
+  const [ticketData, setTicketData] = useState(null);
+  const [trackingHistory, setTrackingHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const chargerInfosTicket = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // 1. Récupérer les détails du billet public
+        const resBillet = await axios.get(`${API_BASE_URL}/api/billets/public/${codeUnique}`);
+        setTicketData(resBillet.data);
+
+        // 2. Récupérer l'historique du tracking de ce billet précis
+        const resTracking = await axios.get(`${API_BASE_URL}/api/billets/tracking/${resBillet.data.id}`);
+        setTrackingHistory(resTracking.data);
+      } catch (err) {
+        setError("Impossible de charger ce billet. Le code est peut-être invalide ou expiré.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (codeUnique) {
+      chargerInfosTicket();
+    }
+  }, [codeUnique]);
+
+  const formatueDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+  };
+
+  if (loading) {
+    return (
+      <div style={styles.centerContainer}>
+        <Loader2 size={40} style={styles.spinner} />
+        <p style={{ marginTop: '12px' }}>Génération de votre billet sécurisé en cours...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.centerContainer}>
+        <AlertTriangle size={48} color="#ef4444" />
+        <h3 style={{ marginTop: '16px', color: '#ef4444' }}>Erreur d'accès</h3>
+        <p style={{ color: '#8b949e', textAlign: 'center', maxWidth: '300px' }}>{error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.body}>
+      <main style={styles.container}>
+        {/* EN-TÊTE DU BILLET */}
+        <div style={styles.successHeader}>
+          <CheckCircle2 size={32} color="#22c55e" />
+          <h3 style={styles.successTitle}>Billet Officiel Actif</h3>
+        </div>
+
+        {/* DESIGN DU BILLET ÉLECTRONIQUE */}
+        <div style={styles.ticketContainer}>
+          <div style={styles.ticketLeft}>
+            <div style={styles.ticketStamp}>ARTI-SYS SECURE</div>
+            <div style={styles.ticketValue}>{ticketData?.type_billet}</div>
+            <div style={styles.ticketPrice}>{ticketData?.prix} USD</div>
+          </div>
+
+          <div style={styles.ticketRight}>
+            <div style={styles.ticketHeader}>
+              <span style={styles.ticketEvent}>{ticketData?.evenement_titre}</span>
+              <span style={styles.ticketDate}>
+                <Calendar size={12} style={{ marginRight: '4px' }} />
+                {formatueDate(ticketData?.evenement_date)}
+              </span>
+              <span style={styles.ticketLocation}>
+                <MapPin size={12} style={{ marginRight: '4px' }} />
+                {ticketData?.evenement_lieu}
+              </span>
+            </div>
+            
+            <div style={styles.ticketDetails}>
+              <div style={styles.ticketMeta}>
+                <span style={styles.metaLabel}>TITULAIRE :</span>
+                <span style={styles.metaValue}>{ticketData?.nom_client}</span>
+              </div>
+              <div style={styles.ticketMeta}>
+                <span style={styles.metaLabel}>ID SÉCURISÉ :</span>
+                <span style={styles.metaValueCode}>{ticketData?.code_unique}</span>
+              </div>
+            </div>
+
+            <div style={styles.qrContainer}>
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(ticketData?.code_unique || '')}&color=000000`} 
+                alt="QR Code" 
+                style={styles.qrImage}
+              />
+              <div style={styles.qrTag}>
+                <ShieldCheck size={10} color="#22c55e" /> SCAN UNIQUE
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* MODULE DE SUIVI / TRACKING CLIENT
+        <div style={styles.trackingCard}>
+          <h4 style={styles.trackingTitle}>
+            <Activity size={18} style={{ color: '#ef4444', marginRight: '6px' }} />
+            Historique d'accès & Tracing
+          </h4>
+          <p style={styles.trackingSubtitle}>Chaque étape de vie de votre billet est enregistrée pour des raisons de sécurité.</p>
+
+          <div style={styles.timeline}>
+            {trackingHistory.length === 0 ? (
+              <p style={{ fontSize: '13px', color: '#8b949e' }}>Aucun mouvement enregistré pour le moment.</p>
+            ) : (
+              trackingHistory.map((track, index) => (
+                <div key={track.id} style={styles.timelineItem}>
+                  <div style={styles.timelineDot} />
+                  <div style={styles.timelineContent}>
+                    <div style={styles.timelineHeader}>
+                      <span style={styles.actionBadge(track.action)}>{track.action}</span>
+                      <span style={styles.timelineTime}>{formatueDate(track.cree_le)}</span>
+                    </div>
+                    <p style={styles.timelineDesc}>{track.description}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div> */}
+      </main>
+    </div>
+  );
+};
+
+// Styles optimisés pour smartphone (Mobile First)
+const styles = {
+  body: {
+    backgroundColor: '#0b0c10',
+    color: '#f5f5f7',
+    minHeight: '100vh',
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '20px 15px',
+    fontFamily: 'system-ui, sans-serif',
+  },
+  container: {
+    width: '100%',
+    maxWidth: '500px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  centerContainer: {
+    backgroundColor: '#0b0c10',
+    color: '#f5f5f7',
+    minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '20px',
+  },
+  spinner: {
+    animation: 'spin 1s linear infinite',
+    color: '#ef4444',
+  },
+  successHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    justifyContent: 'center',
+  },
+  successTitle: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#22c55e',
+    margin: 0,
+  },
+  // Reprise et adaptation Mobile du Ticket
+  ticketContainer: {
+    display: 'flex',
+    backgroundColor: '#ffffff',
+    color: '#000000',
+    borderRadius: '12px',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+    overflow: 'hidden',
+    border: '1px solid #d1d5db',
+  },
+  ticketLeft: {
+    backgroundColor: '#111827',
+    color: '#ffffff',
+    padding: '15px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRight: '2px dashed #e5e7eb',
+    width: '95px',
+    textAlign: 'center',
+    boxSizing: 'border-box',
+  },
+  ticketStamp: {
+    fontSize: '6px',
+    letterSpacing: '0.5px',
+    color: '#9ca3af',
+    fontWeight: 'bold',
+    marginBottom: '10px',
+  },
+  ticketValue: {
+    fontSize: '14px',
+    fontWeight: '900',
+    color: '#ef4444',
+    textTransform: 'uppercase'
+  },
+  ticketPrice: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    marginTop: '6px',
+  },
+  ticketRight: {
+    flex: 1,
+    padding: '15px',
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    gap: '8px',
+    boxSizing: 'border-box',
+  },
+  ticketHeader: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+    paddingRight: '65px', // Espace pour pas écraser le QR code
+  },
+  ticketEvent: {
+    fontSize: '14px',
+    fontWeight: '800',
+    color: '#111827'
+  },
+  ticketDate: {
+    fontSize: '10px',
+    color: '#ef4444',
+    fontWeight: '700',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  ticketLocation: {
+    fontSize: '10px',
+    color: '#4b5563',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  ticketDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    marginTop: '5px',
+  },
+  ticketMeta: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  metaLabel: {
+    fontSize: '8px',
+    color: '#6b7280',
+    fontWeight: 'bold',
+  },
+  metaValue: {
+    fontSize: '12px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  metaValueCode: {
+    fontSize: '9px',
+    fontFamily: 'monospace',
+    color: '#374151',
+  },
+  qrContainer: {
+    position: 'absolute',
+    right: '12px',
+    bottom: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '2px',
+  },
+  qrImage: {
+    width: '65px',
+    height: '65px',
+    border: '1px solid #e5e7eb',
+    padding: '2px',
+    borderRadius: '4px',
+  },
+  qrTag: {
+    fontSize: '6px',
+    fontWeight: 'bold',
+    color: '#10b981',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+  },
+  // STYLES TIMELINE DU TRACKING
+  trackingCard: {
+    backgroundColor: '#161b22',
+    border: '1px solid #30363d',
+    borderRadius: '12px',
+    padding: '20px',
+  },
+  trackingTitle: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    margin: '0 0 4px 0',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  trackingSubtitle: {
+    fontSize: '12px',
+    color: '#8b949e',
+    margin: '0 0 20px 0',
+  },
+  timeline: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    position: 'relative',
+    paddingLeft: '10px',
+  },
+  timelineItem: {
+    display: 'flex',
+    gap: '12px',
+    position: 'relative',
+  },
+  timelineDot: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#ef4444',
+    marginTop: '6px',
+    flexShrink: 0,
+  },
+  timelineContent: {
+    flex: 1,
+    backgroundColor: '#0d1117',
+    border: '1px solid #21262d',
+    borderRadius: '8px',
+    padding: '10px 12px',
+  },
+  timelineHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '4px',
+    marginBottom: '6px',
+  },
+  actionBadge: (action) => {
+    let color = '#ef4444';
+    if (action === 'VENTE') color = '#38bdf8';
+    if (action === 'SCAN_REUSSI') color = '#22c55e';
+    return {
+      backgroundColor: `${color}15`,
+      color: color,
+      border: `1px solid ${color}`,
+      fontSize: '9px',
+      fontWeight: 'bold',
+      padding: '2px 6px',
+      borderRadius: '4px',
+    };
+  },
+  timelineTime: {
+    fontSize: '10px',
+    color: '#8b949e',
+  },
+  timelineDesc: {
+    fontSize: '12px',
+    color: '#c9d1d9',
+    margin: 0,
+  }
+};
+
+export default TicketPublic;
+
+
+
+
+Info_production (Base des données)
+Hostname : dpg-d9c8nv9kh4rs73cabk4g-a
+Port : 5432
+Database : concertticketsystem
+Username : concert
+Password : AgFXNu7tkcloSsQEmnOK4urY4U2GKBA4
+
+Internal : postgresql://concert:AgFXNu7tkcloSsQEmnOK4urY4U2GKBA4@dpg-d9c8nv9kh4rs73cabk4g-a/concertticketsystem
+
+External : postgresql://concert:AgFXNu7tkcloSsQEmnOK4urY4U2GKBA4@dpg-d9c8nv9kh4rs73cabk4g-a.ohio-postgres.render.com/concertticketsystem
+
+Psql Command : PGPASSWORD=AgFXNu7tkcloSsQEmnOK4urY4U2GKBA4 psql -h dpg-d9c8nv9kh4rs73cabk4g-a.ohio-postgres.render.com -U concert concertticketsystem
+
+
+
+https://github.com/japhetmasuamamn-collab/concert-ticket-system.git
+
+
+
+echo "# concert-ticket-system" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/japhetmasuamamn-collab/concert-ticket-system.git
+git push -u origin main
+
+
+git remote add origin https://github.com/japhetmasuamamn-collab/concert-ticket-system.git
+git branch -M main
+git push -u origin main
