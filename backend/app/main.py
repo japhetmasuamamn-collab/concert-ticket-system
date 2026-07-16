@@ -276,6 +276,29 @@ def obtenir_historique_actions(limit: int = 100, db: Session = Depends(get_db)):
 
 # Dans votre main.py (ou l'endroit où vous définissez vos routes @app.get / @app.post)
 
+@app.get("/api/billets/public/{code_unique}")
+def obtenir_billet_public(code_unique: str, db: Session = Depends(get_db)):
+
+    billet = db.query(models.Billet).filter(
+        models.Billet.code_unique == code_unique
+    ).first()
+
+    if not billet:
+        raise HTTPException(
+            status_code=404,
+            detail="Billet introuvable"
+        )
+
+    return {
+        "code_unique": billet.code_unique,
+        "nom_client": billet.client.nom,
+        "type_billet": billet.type_billet.nom_type,
+        "prix": float(billet.type_billet.prix),
+        "evenement_titre": billet.type_billet.evenement.titre,
+        "evenement_date": billet.type_billet.evenement.date_evenement,
+        "evenement_lieu": billet.type_billet.evenement.lieu_nom
+    }
+
 # -------------------------------------------------------------
 # 1. ENDPOINT PUBLIC : Détails du billet par code unique (CORRIGÉ)
 # -------------------------------------------------------------
