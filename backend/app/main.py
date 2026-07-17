@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from datetime import datetime
-from datetime import date 
 from fastapi.responses import HTMLResponse
 from fastapi import Request
 
@@ -301,7 +300,10 @@ def obtenir_billet_public(code_unique: str, db: Session = Depends(get_db)):
     }
 
 # -------------------------------------------------------------
-# 1. ENDPOINT PUBLIC : Détails du billet par code unique (SÉCURITÉ ULTIME)
+# 1. ENDPOINT PUBLIC : Détails du billet par code unique (HARMONISÉ ET SÉCURISÉ)
+# -------------------------------------------------------------
+# -------------------------------------------------------------
+# 1. ENDPOINT PUBLIC : Détails du billet par code unique (CORRIGÉ)
 # -------------------------------------------------------------
 @app.get("/ticket/{code_unique}", response_class=HTMLResponse)
 def afficher_billet_html(code_unique: str, request: Request, db: Session = Depends(get_db)):
@@ -338,19 +340,9 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
     type_billet = billet.type_billet
     evenement = type_billet.evenement if type_billet else None
 
-    # 1. Formatage de la date de l'événement
+    # Formatage de la date à la main en Python
     date_str = "ÉVÉNEMENT"
-    date_evenement_obj = None
     if evenement and evenement.date_evenement:
-        if isinstance(evenement.date_evenement, (date,)):
-            date_evenement_obj = evenement.date_evenement
-        else:
-            try:
-                from datetime import datetime
-                date_evenement_obj = datetime.strptime(str(evenement.date_evenement)[:10], "%Y-%m-%d").date()
-            except Exception:
-                date_evenement_obj = None
-
         try:
             date_str = evenement.date_evenement.strftime('%d %B %Y').upper()
         except AttributeError:
@@ -362,42 +354,9 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
     nom_type = type_billet.nom_type if type_billet else "STANDARD"
     prix_ticket = f"{type_billet.prix} USD" if type_billet else "? USD"
 
-    # 2. Logique du verrouillage temporel du QR Code
-    aujourd_hui = date.today()
-    est_verrouille = True
-
-    if date_evenement_obj:
-        if aujourd_hui >= date_evenement_obj:
-            est_verrouille = False
-    else:
-        est_verrouille = False
-
-    # Encodage du code unique nécessaire pour l'API QR Code (généré dans tous les cas pour le secours)
+    # Encodage sécurisé du code unique pour l'API QR Code
     import urllib.parse
     code_encode = urllib.parse.quote(billet.code_unique)
-
-    # Génération de la zone QR Code / Cadenas
-    if est_verrouille:
-        # Version cadenassée (Le QR code n'est pas généré, mais on injecte le jeton encodé dans un attribut "data-code")
-        qr_section_html = f"""
-        <div class="qr-container locked-box" id="lock-box" data-code="{code_encode}" style="cursor: pointer;">
-            <div class="lock-icon">🔒</div>
-            <div class="qr-tag locked-tag">QR CODE VERROUILLÉ</div>
-            <div class="locked-hint">S'active automatiquement le jour de l'événement.</div>
-        </div>
-        """
-    else:
-        # Version déverrouillée classique
-        qr_section_html = f"""
-        <div class="qr-container">
-            <img 
-                src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={code_encode}&color=000000" 
-                alt="QR Code" 
-                class="qr-image"
-            />
-            <div class="qr-tag">✓ SCAN UNIQUE</div>
-        </div>
-        """
 
     return f"""
     <!DOCTYPE html>
@@ -495,7 +454,7 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
                 font-weight: 800;
                 letter-spacing: 0.5px;
                 color: #111827;
-                margin-right: 110px;
+                margin-right: 100px;
             }}
 
             .ticket-date {{
@@ -543,19 +502,6 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
                 font-weight: bold;
             }}
 
-            .id-warning {{
-                background-color: #fffbeb;
-                border: 1px solid #fef3c7;
-                border-left: 4px solid #d97706;
-                padding: 8px 12px;
-                border-radius: 6px;
-                font-size: 10px;
-                color: #b45309;
-                line-height: 1.4;
-                margin-top: 5px;
-                max-width: calc(100% - 120px);
-            }}
-
             .qr-container {{
                 position: absolute;
                 right: 24px;
@@ -582,35 +528,6 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
                 text-align: center;
             }}
 
-            .locked-box {{
-                border: 2px dashed #d1d5db;
-                padding: 10px;
-                border-radius: 8px;
-                background-color: #f9fafb;
-                width: 90px;
-                height: 90px;
-                justify-content: center;
-                box-sizing: border-box;
-                user-select: none; /* Évite de sélectionner le texte lors des clics rapides */
-            }}
-
-            .lock-icon {{
-                font-size: 24px;
-                margin-bottom: 2px;
-            }}
-
-            .locked-tag {{
-                color: #d97706 !important;
-                font-size: 7px !important;
-            }}
-
-            .locked-hint {{
-                font-size: 6px;
-                color: #9ca3af;
-                text-align: center;
-                line-height: 1.1;
-            }}
-
             @media (max-width: 600px) {{
                 .ticket-container {{
                     flex-direction: column;
@@ -628,9 +545,6 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
                 }}
                 .ticket-event {{
                     margin-right: 0;
-                }}
-                .id-warning {{
-                    max-width: 100%;
                 }}
                 .qr-container {{
                     position: relative;
@@ -669,51 +583,16 @@ def afficher_billet_html(code_unique: str, request: Request, db: Session = Depen
                     </div>
                 </div>
 
-                <div class="id-warning">
-                    ⚠️ <strong>Vérification à l'entrée :</strong> Veuillez présenter votre carte d'identité physique correspondant au nom <strong>{nom_client}</strong>. L'accès vous sera refusé sans justificatif.
+                <div class="qr-container">
+                    <img 
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={code_encode}&color=000000" 
+                        alt="QR Code" 
+                        class="qr-image"
+                    />
+                    <div class="qr-tag">✓ SCAN UNIQUE</div>
                 </div>
-
-                {qr_section_html}
             </div>
         </div>
-
-        <!-- LE SCRIPT DE SECOURS (4 CLICS SUR LE CADENAS) -->
-        <script>
-            let clickCount = 0;
-            const lockBox = document.getElementById('lock-box');
-
-            if (lockBox) {{
-                lockBox.addEventListener('click', () => {{
-                    clickCount++;
-                    
-                    // Si on atteint 4 clics
-                    if (clickCount === 4) {{
-                        clickCount = 0; // Réinitialisation immédiate du compteur
-                        
-                        const password = prompt("🔑 [Sécurité] Entrez le mot de passe de secours pour forcer l'affichage du QR Code :");
-                        
-                        if (password === "Mage2026") {{
-                            const codeEncode = lockBox.getAttribute('data-code');
-                            
-                            // On transforme dynamiquement le cadenas en QR code
-                            lockBox.classList.remove('locked-box');
-                            lockBox.removeAttribute('style'); // Enlève le cursor pointer
-                            
-                            lockBox.innerHTML = `
-                                <img 
-                                    src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=\${{codeEncode}}&color=000000" 
-                                    alt="QR Code" 
-                                    class="qr-image"
-                                />
-                                <div class="qr-tag" style="color: #ef4444;">✓ FORCÉ MANUELLEMENT</div>
-                            `;
-                        }} else if (password !== null) {{
-                            alert("❌ Mot de passe incorrect.");
-                        }}
-                    }}
-                }});
-            }}
-        </script>
 
     </body>
     </html>
