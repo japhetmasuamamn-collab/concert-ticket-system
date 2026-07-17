@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, KeyRound, Loader2, CheckCircle } from 'lucide-react';
+import { X, KeyRound, Loader2, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config';
 
@@ -8,6 +8,11 @@ const ModalChangementMdp = ({ onClose }) => {
   const [nouveauMdp, setNouveauMdp] = useState('');
   const [confirmerMdp, setConfirmerMdp] = useState('');
   
+  // États pour gérer la visibilité de chaque mot de passe
+  const [showAncienMdp, setShowAncienMdp] = useState(false);
+  const [showNouveauMdp, setShowNouveauMdp] = useState(false);
+  const [showConfirmerMdp, setShowConfirmerMdp] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -28,13 +33,11 @@ const ModalChangementMdp = ({ onClose }) => {
 
     setLoading(true);
     try {
-      // Endpoint sécurisé pour l'utilisateur actuellement connecté
       await axios.put(`${API_BASE_URL}/api/mon-compte/modifier-mdp`, {
         ancien_mot_de_passe: ancienMdp,
         nouveau_mot_de_passe: nouveauMdp
       }, {
         headers: {
-          // Si tu passes l'identifiant par le localStorage ou un token
           'X-Agent-Id': localStorage.getItem('agent_id') 
         }
       });
@@ -42,7 +45,7 @@ const ModalChangementMdp = ({ onClose }) => {
       setSuccess(true);
       setTimeout(() => {
         onClose();
-      }, 2000); // Ferme automatiquement la modal après 2 secondes de succès
+      }, 2000);
 
     } catch (err) {
       setError(err.response?.data?.detail || "Erreur lors de la modification du mot de passe.");
@@ -74,41 +77,71 @@ const ModalChangementMdp = ({ onClose }) => {
 
             <div style={styles.inputGroup}>
               <label style={styles.label}>Mot de passe actuel</label>
-              <input 
-                type="password" 
-                value={ancienMdp} 
-                onChange={(e) => setAncienMdp(e.target.value)} 
-                placeholder="••••••••"
-                required
-                style={styles.input}
-                disabled={loading}
-              />
+              <div style={styles.passwordWrapper}>
+                <input 
+                  type={showAncienMdp ? "text" : "password"} 
+                  value={ancienMdp} 
+                  onChange={(e) => setAncienMdp(e.target.value)} 
+                  placeholder="••••••••"
+                  required
+                  style={styles.input}
+                  disabled={loading}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowAncienMdp(!showAncienMdp)}
+                  style={styles.eyeButton}
+                  disabled={loading}
+                >
+                  {showAncienMdp ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <div style={styles.inputGroup}>
               <label style={styles.label}>Nouveau mot de passe</label>
-              <input 
-                type="password" 
-                value={nouveauMdp} 
-                onChange={(e) => setNouveauMdp(e.target.value)} 
-                placeholder="Minimum 4 caractères"
-                required
-                style={styles.input}
-                disabled={loading}
-              />
+              <div style={styles.passwordWrapper}>
+                <input 
+                  type={showNouveauMdp ? "text" : "password"} 
+                  value={nouveauMdp} 
+                  onChange={(e) => setNouveauMdp(e.target.value)} 
+                  placeholder="Minimum 4 caractères"
+                  required
+                  style={styles.input}
+                  disabled={loading}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowNouveauMdp(!showNouveauMdp)}
+                  style={styles.eyeButton}
+                  disabled={loading}
+                >
+                  {showNouveauMdp ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <div style={styles.inputGroup}>
               <label style={styles.label}>Confirmer le nouveau mot de passe</label>
-              <input 
-                type="password" 
-                value={confirmerMdp} 
-                onChange={(e) => setConfirmerMdp(e.target.value)} 
-                placeholder="••••••••"
-                required
-                style={styles.input}
-                disabled={loading}
-              />
+              <div style={styles.passwordWrapper}>
+                <input 
+                  type={showConfirmerMdp ? "text" : "password"} 
+                  value={confirmerMdp} 
+                  onChange={(e) => setConfirmerMdp(e.target.value)} 
+                  placeholder="••••••••"
+                  required
+                  style={styles.input}
+                  disabled={loading}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowConfirmerMdp(!showConfirmerMdp)}
+                  style={styles.eyeButton}
+                  disabled={loading}
+                >
+                  {showConfirmerMdp ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <div style={styles.modalActions}>
@@ -156,9 +189,20 @@ const styles = {
   modalForm: { display: 'flex', flexDirection: 'column', gap: '16px' },
   inputGroup: { display: 'flex', flexDirection: 'column', gap: '6px' },
   label: { fontSize: '13px', fontWeight: '600', color: '#8b949e' },
+  passwordWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center'
+  },
   input: {
     backgroundColor: '#0d1117', border: '1px solid #30363d', borderRadius: '6px',
-    padding: '10px 12px', fontSize: '14px', color: '#ffffff', outline: 'none'
+    padding: '10px 40px 10px 12px', fontSize: '14px', color: '#ffffff', outline: 'none',
+    width: '100%', boxSizing: 'border-box'
+  },
+  eyeButton: {
+    position: 'absolute', right: '12px', background: 'none', border: 'none',
+    color: '#8b949e', cursor: 'pointer', display: 'flex', alignItems: 'center',
+    padding: 0
   },
   modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px', borderTop: '1px solid #21262d', paddingTop: '16px' },
   cancelBtn: { backgroundColor: 'transparent', border: '1px solid #30363d', color: '#c9d1d9', borderRadius: '6px', padding: '8px 16px', fontWeight: '600', cursor: 'pointer' },
