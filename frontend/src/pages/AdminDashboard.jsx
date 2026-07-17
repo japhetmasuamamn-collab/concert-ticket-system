@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, Users, DollarSign, Ticket, LayoutDashboard, 
-  LogOut, RefreshCw, Loader2, UserPlus, X, Search, CheckCircle2, HelpCircle
+  LogOut, RefreshCw, Loader2, UserPlus, X, Search, CheckCircle2, KeyRound, HelpCircle
 } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config';
 
 import DetailsVentesAgent from '../components/DetailsVentesAgent';
 import ModalGestionStock from '../components/ModalGestionStock';
+import ModalChangementMdp from '../components/ModalChangementMdp';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -41,6 +42,8 @@ const AdminDashboard = () => {
 
   const [agentSelectionne, setAgentSelectionne] = useState(null);
   const [categoriePourStock, setCategoriePourStock] = useState(null);
+
+  const [isMdpModalOpen, setIsMdpModalOpen] = useState(false);
 
   // Fonction unique de chargement de toutes les APIs en parallèle
   const chargerDonneesDashboard = async () => {
@@ -165,6 +168,9 @@ const AdminDashboard = () => {
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             {/* BOUTON VOIR LES CLIENTS ACHETEURS */}
+            <button onClick={() => setIsMdpModalOpen(true)} style={styles.secondaryActionBtn} title="Modifier mon mot de passe de sécurité">
+              <KeyRound size={16} style={{ color: '#eb860d' }} /> Sécurité
+            </button>
             <button onClick={ouvrirModalClients} style={styles.secondaryActionBtn}>
               <Users size={16} /> Voir les acheteurs
             </button>
@@ -507,6 +513,11 @@ const AdminDashboard = () => {
           onClose={() => setCategoriePourStock(null)} 
           onStockMisAJour={chargerDonneesDashboard} 
         />
+      )}
+
+      {/* --- AJOUT DE LA MODAL DE CHANGEMENT DE MOT DE PASSE --- */}
+      {isMdpModalOpen && (
+        <ModalChangementMdp onClose={() => setIsMdpModalOpen(false)} />
       )}
 
       <footer style={styles.footer}>
