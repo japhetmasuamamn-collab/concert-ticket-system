@@ -262,6 +262,46 @@ def lister_clients_ayant_paye(db: Session = Depends(get_db)):
         
     return clients_liste
 
+# ==========================================================
+# ENDPOINT D'ANNULATION (ADMINISTRATION/SÉCURITÉ)
+# ==========================================================
+
+@app.delete("/api/billets/{ticket_id}", tags=["Billets"])
+def annuler_et_supprimer_billet(ticket_id: int, db: Session = Depends(get_db)):
+    """
+    Supprime un billet de la base de données après avoir nettoyé 
+    son historique de tracking afin d'éviter les violations de clés étrangères.
+    """
+    # 1. Rechercher si le billet existe
+    billet = db.query(models.Billet).filter(models.Billet.id == ticket_id).first()
+    if not billet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Billet introuvable en base de données."
+        )
+
+    try:
+        # 2. Supprimer d'abord l'historique de scan/tracking lié à ce billet spécifique
+        db.query(models.TicketTracking).filter(models.TicketTracking.billet_id == ticket_id).delete()
+        
+        # 3. Supprimer le billet physique
+        db.delete(billet)
+        
+        # 4. Enregistrer les modifications en base de données (Commit)
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Le billet {ticket_id} et son historique de scan ont été supprimés avec succès."
+        }
+        
+    except Exception as e:
+        db.rollback()  # Annule la transaction en cours en cas de plantage
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la suppression en base de données : {str(e)}"
+        )
+
 
 @app.get("/api/admin/tracking", response_model=list[schemas.TicketTrackingResponse], tags=["Administration"])
 def obtenir_historique_actions(limit: int = 100, db: Session = Depends(get_db)):
