@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Search, User, Phone, Ticket, CalendarDays, X, Loader2 } from 'lucide-react';
+import { Calendar, Search, User, Phone, Ticket, CalendarDays, X, Loader2, Trash2, Eye } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config';
 
@@ -7,29 +7,66 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
   const [billets, setBillets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionLoadingId, setActionLoadingId] = useState(null); // Pour afficher un loader sur le billet en cours d'annulation
   
   // États pour les filtres
   const [filtreNom, setFiltreNom] = useState('');
   const [filtreDate, setFiltreDate] = useState('');
 
-  useEffect(() => {
-    const chargerVentesAgent = async () => {
-      if (!agent) return;
-      setLoading(true);
-      setError('');
-      try {
-        // Interrogation de l'endpoint API dédié pour récupérer les ventes de l'agent
-        const response = await axios.get(`${API_BASE_URL}/api/billets/agent/${agent.id}`);
-        setBillets(response.data);
-      } catch (err) {
-        setError("Impossible de charger l'historique des ventes de cet agent.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  // État pour afficher visuellement un QR Code dans une micro-modale / popover
+  const [qrCodeZoom, setQrCodeZoom] = useState(null); // Contiendra le code unique sélectionné
 
+  const chargerVentesAgent = async () => {
+    if (!agent) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/billets/agent/${agent.id}`);
+      setBillets(response.data);
+    } catch (err) {
+      setError("Impossible de charger l'historique des ventes de cet agent.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     chargerVentesAgent();
   }, [agent]);
+
+  // Fonction d'annulation sécurisée
+  const gererAnnulationBillet = async (ticketId, codeUnique, prixBillet) => {
+    // 1. Demande de confirmation avec mot de passe de sécurité
+    const motDePasse = prompt(
+      `⚠️ ATTENTION : Vous allez annuler le billet ${codeUnique} (${prixBillet} USD).\n` +
+      `Cette action est irréversible. Pour confirmer, saisissez le mot de passe d'annulation :`
+    );
+
+    if (!motDePasse) return; // Annulation de l'action si prompt vide ou annulé
+
+    if (motDePasse !== "Mage2026") {
+      alert("❌ Mot de passe incorrect. Annulation refusée.");
+      return;
+    }
+
+    // 2. Appel API pour supprimer/annuler le billet
+    setActionLoadingId(ticketId);
+    try {
+      // Ajuste cette URL selon la structure exacte de ton API FastAPI
+      await axios.delete(`${API_BASE_URL}/api/billets/${ticketId}`);
+      
+      // Notification de succès
+      alert(`✅ Le billet ${codeUnique} a été annulé avec succès. Les quotas et les montants ont été réajustés.`);
+      
+      // Rafraîchir la liste localement pour faire disparaître le billet annulé
+      setBillets(prev => prev.filter(b => b.ticket_id !== ticketId));
+    } catch (err) {
+      const messageErreur = err.response?.data?.detail || "Une erreur est survenue lors de l'annulation.";
+      alert(`❌ Échec de l'annulation : ${messageErreur}`);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   if (!agent) return null;
 
@@ -37,7 +74,6 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
   const billetsFiltres = billets.filter((b) => {
     const correspondNom = b.nom_client.toLowerCase().includes(filtreNom.toLowerCase());
     
-    // Comparaison de date (on compare l'année-mois-jour)
     let correspondDate = true;
     if (filtreDate) {
       const dateAchatStr = new Date(b.date_achat).toISOString().split('T')[0];
@@ -66,7 +102,7 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
         <div style={styles.modalHeader}>
           <div>
             <h3 style={styles.modalTitle}>Ventes de l'Agent : {agent.nom}</h3>
-            <p style={styles.modalSubtitle}>Consultez et filtrez les billets émis par cet agent.</p>
+            <p style={styles.modalSubtitle}>Consultez, visualisez les QR codes ou annulez des transactions.</p>
           </div>
           <button onClick={onClose} style={styles.closeBtn}>
             <X size={20} />
@@ -131,6 +167,7 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
                     <th style={styles.th}>Catégorie</th>
                     <th style={styles.th}>Prix</th>
                     <th style={styles.th}>Code Unique</th>
+                    <th style={styles.th} style={{ textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,6 +204,32 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
                       <td style={styles.td}>
                         <code style={styles.codeText}>{b.code_unique}</code>
                       </td>
+                      <td style={styles.td}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          {/* Bouton Voir QR Code */}
+                          <button
+                            onClick={() => setQrCodeZoom(b.code_unique)}
+                            style={styles.actionBtnView}
+                            title="Visualiser le QR Code"
+                          >
+                            <Eye size={14} />
+                          </button>
+
+                          {/* Bouton Annuler Vente */}
+                          <button
+                            onClick={() => gererAnnulationBillet(b.ticket_id, b.code_unique, b.prix)}
+                            disabled={actionLoadingId === b.ticket_id}
+                            style={styles.actionBtnDelete}
+                            title="Annuler cette vente"
+                          >
+                            {actionLoadingId === b.ticket_id ? (
+                              <Loader2 size={14} style={styles.spinner} />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -175,12 +238,35 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
           )}
         </div>
       </div>
+
+      {/* POPUP DE VISUALISATION EXPRESS DU QR CODE */}
+      {qrCodeZoom && (
+        <div style={styles.qrPopoverOverlay} onClick={() => setQrCodeZoom(null)}>
+          <div style={styles.qrPopoverContent} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.qrPopoverHeader}>
+              <span style={{ fontWeight: 'bold', color: '#ffffff', fontSize: '14px' }}>Aperçu Billet : {qrCodeZoom}</span>
+              <button onClick={() => setQrCodeZoom(null)} style={styles.qrPopoverClose}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={styles.qrPopoverBody}>
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrCodeZoom)}&color=000000`} 
+                alt="QR Code" 
+                style={styles.qrPopoverImage}
+              />
+              <span style={styles.qrPopoverTag}>✓ SCAN DE SECOURS ADMIN</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Styles cohérents avec ton thème existant (Dark / Rouge)
+// Styles enrichis et cohérents avec ton thème existant
 const styles = {
+  // ... Tes styles existants inchangés ...
   modalOverlay: {
     position: 'fixed',
     top: 0,
@@ -199,7 +285,7 @@ const styles = {
     border: '1px solid #30363d',
     borderRadius: '12px',
     width: '100%',
-    maxWidth: '900px',
+    maxWidth: '950px', // Légèrement élargi pour accueillir la nouvelle colonne d'actions
     maxHeight: '85vh',
     display: 'flex',
     flexDirection: 'column',
@@ -339,6 +425,7 @@ const styles = {
   td: {
     padding: '12px',
     color: '#c9d1d9',
+    verticalAlign: 'middle'
   },
   iconFlex: {
     display: 'flex',
@@ -358,6 +445,89 @@ const styles = {
     fontFamily: 'monospace',
     color: '#8b949e',
     fontSize: '12px',
+  },
+
+  // --- NOUVEAUX STYLES POUR LES ACTIONS ET LE POPOVER QR ---
+  actionBtnView: {
+    backgroundColor: '#21262d',
+    border: '1px solid #30363d',
+    color: '#58a6ff',
+    borderRadius: '6px',
+    padding: '6px 10px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
+  },
+  actionBtnDelete: {
+    backgroundColor: 'rgba(248, 113, 113, 0.1)',
+    border: '1px solid rgba(248, 113, 113, 0.2)',
+    color: '#f87171',
+    borderRadius: '6px',
+    padding: '6px 10px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
+  },
+  qrPopoverOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1100,
+  },
+  qrPopoverContent: {
+    backgroundColor: '#161b22',
+    border: '1px solid #30363d',
+    borderRadius: '12px',
+    padding: '16px',
+    maxWidth: '280px',
+    width: '100%',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+    textAlign: 'center',
+  },
+  qrPopoverHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '14px',
+    borderBottom: '1px solid #30363d',
+    paddingBottom: '8px',
+  },
+  qrPopoverClose: {
+    background: 'none',
+    border: 'none',
+    color: '#8b949e',
+    cursor: 'pointer',
+    padding: '2px',
+    display: 'flex',
+  },
+  qrPopoverBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+    backgroundColor: '#ffffff',
+    padding: '20px 10px',
+    borderRadius: '8px',
+  },
+  qrPopoverImage: {
+    width: '160px',
+    height: '160px',
+  },
+  qrPopoverTag: {
+    color: '#ef4444',
+    fontSize: '11px',
+    fontWeight: 'bold',
+    letterSpacing: '0.5px',
   }
 };
 
