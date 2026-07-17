@@ -1,5 +1,5 @@
 # backend/app/main.py
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Header
 from fastapi.responses import JSONResponse  # <-- AJOUTE CETTE LIGNE
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -718,3 +718,55 @@ def modifier_stock_categorie(
     db.refresh(categorie)
     
     return {"message": "Stock mis à jour avec succès", "nouveau_total": categorie.quantite_max}
+
+
+
+# Schéma de requête pour le changement de mot de passe
+class ChangerMdpPayload(BaseModel):
+    ancien_mot_de_passe: str
+    nouveau_mot_de_passe: str
+
+
+# ==========================================================
+# ENDPOINT PROFILE : MODIFICATION MOT DE PASSE AGENT
+# ==========================================================
+
+@app.put("/api/mon-compte/modifier-mdp", tags=["Profil"])
+def modifier_mon_mot_de_passe(
+    payload: ChangerMdpPayload,
+    x_agent_id: str = Header(None, alias="X-Agent-Id"),
+    db: Session = Depends(get_db)
+):
+    """
+    Permet à un agent connecté de modifier son mot de passe en vérifiant 
+    l'ancien et en hachant le nouveau via crud.pwd_context.
+    """
+    # 1. Vérification du Header transmis par React
+    if not x_agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Identification de l'agent manquante dans les entêtes."
+        )
+        
+    # 2. Recherche de l'utilisateur dans la table via models.Utilisateur
+    agent = db.query(models.Utilisateur).filter(models.Utilisateur.id == int(x_agent_id)).first()
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Compte agent introuvable."
+        )
+
+    # 3. Vérification de l'ancien mot de passe haché (en utilisant ton crud.pwd_context)
+    if not crud.pwd_context.verify(payload.ancien_mot_de_passe, agent.mot_de_passe):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="L'ancien mot de passe est incorrect."
+        )
+
+    # 4. Hachage du nouveau mot de passe avec le même algorithme que la création/login
+    agent.mot_de_passe = crud.pwd_context.hash(payload.nouveau_mot_de_passe)
+
+    # 5. Sauvegarde en Base de données
+    db.commit()
+    
+    return {"status": "success", "message": "Votre mot de passe a été modifié avec succès."}
