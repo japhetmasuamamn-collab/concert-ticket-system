@@ -218,6 +218,7 @@ def performance_des_agents(db: Session = Depends(get_db)):
         resultat.append({
             "id": agent.id,
             "nom": agent.nom,
+            "telephone" : agent.telephone,
             "billets_vendus": len(billets_agent),
             "total_encaisse": float(total_encaisse)
         })
