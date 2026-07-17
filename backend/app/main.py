@@ -675,3 +675,46 @@ def creer_un_nouvel_agent(payload: schemas.UtilisateurCreate, db: Session = Depe
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de la création du compte : {str(e)}"
         )
+
+
+
+# Schéma d'entrée pour la modification du stock
+class StockUpdatePayload(BaseModel):
+    methode: str  # "ajouter" ou "definir"
+    quantite: int
+
+# --- DANS TON FICHIER backend/app/main.py ---
+
+@app.put("/api/admin/categories/{categorie_id}/stock", tags=["Administration"])
+def modifier_stock_categorie(
+    categorie_id: int, 
+    payload: StockUpdatePayload, 
+    db: Session = Depends(get_db)
+):
+    # 1. Rechercher en utilisant le bon modèle : models.TypeBillet
+    categorie = db.query(models.TypeBillet).filter(models.TypeBillet.id == categorie_id).first()
+    if not categorie:
+        raise HTTPException(status_code=404, detail="Catégorie de billet introuvable.")
+
+    # On récupère le nombre de billets déjà vendus associés à ce type de billet
+    # (Puisque la relation dans TypeBillet s'appelle 'billets')
+    nb_vendus = len(categorie.billets)
+
+    # 2. Appliquer les modifications selon la méthode choisie
+    if payload.methode == "ajouter":
+        categorie.quantite_max += payload.quantite
+    elif payload.methode == "definir":
+        # Interdire de fixer un stock inférieur à ce qui a déjà été vendu
+        if payload.quantite < nb_vendus:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Impossible de définir un stock inférieur aux ventes actuelles ({nb_vendus} vendus)."
+            )
+        categorie.quantite_max = payload.quantite
+    else:
+        raise HTTPException(status_code=400, detail="Méthode non valide. Utilisez 'ajouter' ou 'definir'.")
+
+    db.commit()
+    db.refresh(categorie)
+    
+    return {"message": "Stock mis à jour avec succès", "nouveau_total": categorie.quantite_max}
