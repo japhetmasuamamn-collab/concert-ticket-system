@@ -8,6 +8,7 @@ import axios from 'axios';
 import API_BASE_URL from '../config';
 
 import DetailsVentesAgent from '../components/DetailsVentesAgent';
+import ModalGestionStock from '../components/ModalGestionStock';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ const AdminDashboard = () => {
   const [rechercheClient, setRechercheClient] = useState('');
 
   const [agentSelectionne, setAgentSelectionne] = useState(null);
+  const [categoriePourStock, setCategoriePourStock] = useState(null);
 
   // Fonction unique de chargement de toutes les APIs en parallèle
   const chargerDonneesDashboard = async () => {
@@ -234,8 +236,21 @@ const AdminDashboard = () => {
                         <td style={styles.td}>{cat.prix} USD</td>
                         <td style={styles.td}>{cat.vendus}</td>
                         <td style={styles.td}>
-                          <span style={(cat.quantite_max - cat.vendus) < 15 ? styles.badgeDanger : styles.badgeSuccess}>
+                          {/* Le badge est maintenant interactif et ouvre la modal au clic */}
+                          <span 
+                            onClick={() => setCategoriePourStock(cat)}
+                            style={{
+                              ...((cat.quantite_max - cat.vendus) < 15 ? styles.badgeDanger : styles.badgeSuccess),
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              gap: '6px',
+                              alignItems: 'center',
+                              userSelect: 'none'
+                            }}
+                            title="Cliquer pour gérer ou ajouter du stock pour cette catégorie"
+                          >
                             {cat.quantite_max - cat.vendus} / {cat.quantite_max}
+                            <span style={{ fontSize: '11px', opacity: 0.8 }}>⚙️</span>
                           </span>
                         </td>
                       </tr>
@@ -483,6 +498,14 @@ const AdminDashboard = () => {
         <DetailsVentesAgent 
           agent={agentSelectionne} 
           onClose={() => setAgentSelectionne(null)} 
+        />
+      )}
+
+      {categoriePourStock && (
+        <ModalGestionStock 
+          categorie={categoriePourStock} 
+          onClose={() => setCategoriePourStock(null)} 
+          onStockMisAJour={chargerDonneesDashboard} 
         />
       )}
 
