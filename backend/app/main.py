@@ -650,3 +650,28 @@ def obtenir_tracking_billet(billet_id: int, db: Session = Depends(get_db)):
                  .all()
                  
     return tracking
+
+
+@app.post("/api/admin/agents", response_model=schemas.UtilisateurResponse, tags=["Administration"])
+def creer_un_nouvel_agent(payload: schemas.UtilisateurCreate, db: Session = Depends(get_db)):
+    """
+    Crée un nouvel agent ou administrateur depuis le panneau de contrôle frontend.
+    Hache automatiquement le mot de passe via le CRUD sous-jacent.
+    """
+    # 1. Vérifier si l'utilisateur existe déjà par son numéro de téléphone
+    agent_existe = crud.get_utilisateur_par_telephone(db, telephone=payload.telephone)
+    if agent_existe:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"L'agent avec le numéro {payload.telephone} existe déjà."
+        )
+    
+    try:
+        # 2. Insérer l'utilisateur en utilisant ta fonction CRUD officielle
+        nouvel_utilisateur = crud.creer_utilisateur(db=db, utilisateur=payload)
+        return nouvel_utilisateur
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la création du compte : {str(e)}"
+        )
