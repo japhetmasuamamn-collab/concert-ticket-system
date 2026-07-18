@@ -122,3 +122,17 @@ class TicketTracking(Base):
     # Relations
     billet = relationship("Billet") # Permet de remonter facilement au billet concerné
     operateur = relationship("Utilisateur") # Permet d'avoir les détails de l'agent
+
+
+class AllocationStock(Base):
+    __tablename__ = "allocations_stock"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    categorie_billet_id = Column(Integer, ForeignKey("types_billets.id", ondelete="CASCADE"), nullable=False, index=True)
+    quantite = Column(Integer, nullable=False, default=0)
+    cree_le = Column(DateTime, default=obtenir_heure_locale)
+
+    # Relations pour faciliter les requêtes
+    agent = relationship("Utilisateur")
+    type_billet = relationship("TypeBillet")
