@@ -167,3 +167,19 @@ class TicketTrackingResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AllocationStockCreate(BaseModel):
+    agent_id: int
+    categorie_billet_id: int
+    quantite: int = Field(..., gt=0, description="La quantité doit être supérieure à 0")
+
+class AllocationStockResponse(BaseModel):
+    id: int
+    agent_id: int
+    categorie_billet_id: int
+    quantite: int
+    cree_le: datetime
+
+    class Config:
+        from_attributes = True
