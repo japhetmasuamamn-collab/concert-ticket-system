@@ -247,6 +247,7 @@ def performance_des_agents(db: Session = Depends(get_db)):
             "id": agent.id,
             "nom": agent.nom,
             "telephone": agent.telephone,
+            "actif": agent.actif,
             "billets_vendus": len(billets_agent),
             "total_encaisse": float(total_encaisse),
             "allocations": portefeuille_allocations  
@@ -900,3 +901,30 @@ def obtenir_allocations_globales(db: Session = Depends(get_db)):
     resultat = {str(item.categorie_billet_id): item.total for item in allocations_groupes}
     
     return resultat
+
+
+@app.put("/api/admin/agents/{agent_id}/toggle-status", tags=["Administration"])
+def modifier_statut_agent(agent_id: int, db: Session = Depends(get_db)):
+    """
+    Active ou désactive le compte d'un agent.
+    """
+    agent = db.query(models.Utilisateur).filter(
+        models.Utilisateur.id == agent_id, 
+        models.Utilisateur.role == "agent"
+    ).first()
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent introuvable.")
+    
+    # On inverse l'état actuel de l'agent
+    agent.actif = not agent.actif
+    
+    db.commit()
+    db.refresh(agent)
+    
+    return {
+        "id": agent.id,
+        "nom": agent.nom,
+        "actif": agent.actif,
+        "message": "Statut de l'agent mis à jour avec succès."
+    }
