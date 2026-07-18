@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Search, User, Phone, Ticket, CalendarDays, X, Loader2, Trash2, Eye } from 'lucide-react';
+import { Calendar, Search, User, Phone, Ticket, CalendarDays, X, Loader2, Trash2, Eye, Layers } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config';
+
+import ModalAllocationStockAgent from './ModalAllocationStockAgent';
 
 const DetailsVentesAgent = ({ agent, onClose }) => {
   const [billets, setBillets] = useState([]);
@@ -12,6 +14,8 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
   // États pour les filtres
   const [filtreNom, setFiltreNom] = useState('');
   const [filtreDate, setFiltreDate] = useState('');
+
+  const [afficherModalAllocation, setAfficherModalAllocation] = useState(false);
 
   // État pour afficher visuellement un QR Code dans une micro-modale / popover
   const [qrCodeZoom, setQrCodeZoom] = useState(null); // Contiendra le code unique sélectionné
@@ -104,9 +108,36 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
             <h3 style={styles.modalTitle}>Ventes de l'Agent : {agent.nom}</h3>
             <p style={styles.modalSubtitle}>Consultez, visualisez les QR codes ou annulez des transactions.</p>
           </div>
-          <button onClick={onClose} style={styles.closeBtn}>
-            <X size={20} />
-          </button>
+          
+          {/* Un conteneur flex invisible pour aligner "Allouer" puis "X" à droite */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            
+            {/* 1. Le bouton d'allocation avec l'icône Lucide */}
+            <button 
+              onClick={() => setAfficherModalAllocation(true)}
+              style={{
+                backgroundColor: '#ef4444', // Rouge ArtiSys
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '8px 14px',
+                fontSize: '13px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px' // Espace entre l'icône et le texte
+              }}
+            >
+              <Layers size={16} /> Allouer un quota de billets
+            </button>
+
+            {/* 2. Le bouton de fermeture (placé après) */}
+            <button onClick={onClose} style={styles.closeBtn}>
+              <X size={20} />
+            </button>
+
+          </div>
         </div>
 
         {/* Barre de Filtres */}
@@ -228,6 +259,7 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
                               <Trash2 size={14} />
                             )}
                           </button>
+                          
                         </div>
                       </td>
                     </tr>
@@ -259,6 +291,15 @@ const DetailsVentesAgent = ({ agent, onClose }) => {
             </div>
           </div>
         </div>
+      )}
+      {afficherModalAllocation && (
+        <ModalAllocationStockAgent 
+          agent={agent} // <-- Utilise "agent" ici
+          onClose={() => setAfficherModalAllocation(false)}
+          onAllocationReussie={() => {
+            chargerVentesAgent();
+          }}
+        />
       )}
     </div>
   );
