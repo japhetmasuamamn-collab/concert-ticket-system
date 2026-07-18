@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Ticket, User, Phone, CheckCircle2, ShieldCheck, Loader2, RefreshCw, Calendar, MapPin, Award, ShoppingBag, Send } from 'lucide-react';
+import { LogOut, Ticket, User, Phone, CheckCircle2, ShieldCheck, Loader2, RefreshCw, Calendar, MapPin, Award, KeyRound, ShoppingBag, Send } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config'; 
 import HistoriqueVentes from '../components/HistoriqueVentes';
@@ -202,6 +202,13 @@ const Vente = () => {
             </div>
             <span style={styles.agentNom}>{agentNom}</span>
           </div>
+          <button 
+            onClick={() => setShowMdpModal(true)} 
+            style={styles.passwordTriggerBtn} 
+            title="Changer de mot de passe"
+          >
+            <KeyRound size={18} />
+          </button>
           <button onClick={handleDeconnexion} style={styles.logoutBtn} title="Se déconnecter">
             <LogOut size={18} />
           </button>
