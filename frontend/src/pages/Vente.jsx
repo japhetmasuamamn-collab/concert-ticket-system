@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Ticket, User, Phone, CheckCircle2, ShieldCheck, Loader2, RefreshCw, Calendar, MapPin, Award, KeyRound, ShoppingBag, Send } from 'lucide-react';
+import { LogOut, Ticket, User, Phone, CheckCircle2, ShieldCheck, Loader2, RefreshCw, Calendar, MapPin, Award, ShoppingBag, KeyRound, Send } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config'; 
 import HistoriqueVentes from '../components/HistoriqueVentes';
 import ModalChangementMdp from '../components/ModalChangementMdp';
+
 
 const Vente = () => {
   const navigate = useNavigate();
@@ -26,6 +27,8 @@ const Vente = () => {
   const [successData, setSuccessData] = useState(null);
 
   const [showMdpModal, setShowMdpModal] = useState(false); // État pour ouvrir/fermer la modal
+
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false); // Gère l'affichage du modal
 
   const [refreshHistoryTrigger, setRefreshHistoryTrigger] = useState(0);
 
@@ -49,10 +52,16 @@ const Vente = () => {
     chargerTypesBillets();
   }, []);
 
-  const handleVendre = async (e) => {
+  // 1. Intercepte le clic et ouvre le modal de validation
+  const handleOuvrirConfirmation = (e) => {
     e.preventDefault();
     if (!selectedType) return;
-    
+    setShowConfirmationModal(true); 
+  };
+
+  // 2. Déclenché uniquement si l'agent clique sur "Oui"
+  const validerEtGenererBillet = async () => {
+    setShowConfirmationModal(false); 
     setLoadingVente(true);
     setErrorVente('');
     setSuccessData(null);
@@ -100,18 +109,23 @@ const Vente = () => {
   };
 
   // FONCTION DE GÉNÉRATION DU MESSAGE WHATSAPP DYNAMIQUE
-  // FONCTION DE GÉNÉRATION DU MESSAGE WHATSAPP DYNAMIQUE
   const redirigerVersWhatsApp = () => {
     if (!successData) return;
 
+    // Nettoyage du numéro de téléphone (Ex: enlever le 0 de tête et ajouter le code pays si besoin. Ici on assume que le numéro est bien formaté)
     let telephone = successData.telephone_client || "";
     
+    // Si le numéro commence par 0, on peut remplacer par l'indicatif de la RDC par exemple (243)
     if (telephone.startsWith('0')) {
       telephone = '243' + telephone.substring(1);
     }
 
-    // --- CORRECTION ICI : On force l'URL vers le serveur 1 (Backend FastAPI) ---
-    const urlTrackingBillet = `https://concert-ticket-system-1.onrender.com/ticket/${successData.code_unique}`;
+    // URL unique sécurisée qui pointe vers l'interface de visualisation du billet (le tracking)
+   // On récupère l'adresse de base du frontend actuel (ex: http://192.168.1.50:3000 ou le nom de domaine)
+    const baseFrontendUrl = window.location.origin; 
+
+    // URL dynamique qui s'adaptera automatiquement à l'adresse IP sur laquelle tourne l'application
+    const urlTrackingBillet = `${baseFrontendUrl}/ticket/${successData.code_unique}`;
 
     // Construction du message pré-rempli
     const message = `Bonjour *${successData.nom_client}*,\n\nVoici votre billet électronique pour l'événement *${successData.evenement_titre}* du ${formatueDate(successData.evenement_date)}.\n\n🎫 *Type de billet :* ${successData.type_billet}\n📍 *Lieu :* ${successData.evenement_lieu}\n\n🔗 *Accéder à votre billet électronique :*\n${urlTrackingBillet}\n\n⚠️ *CONSIGNE DE SÉCURITÉ :*\nConservez précieusement ce lien et ce billet. Ce billet comporte un scan unique. S'il est transféré ou partagé à un tiers, l'accès pourra vous être refusé lors de l'événement.\n\nMerci pour votre confiance !`;
@@ -234,7 +248,7 @@ const Vente = () => {
 
             {errorVente && <div style={styles.errorAlert}>{errorVente}</div>}
 
-            <form onSubmit={handleVendre} style={styles.form}>
+            <form onSubmit={handleOuvrirConfirmation} style={styles.form}>
               
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Articles / Options</label>
@@ -431,7 +445,33 @@ const Vente = () => {
       </main>
 
       {showMdpModal && <ModalChangementMdp onClose={() => setShowMdpModal(false)} />}
-      
+
+      {showConfirmationModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3 style={styles.modalTitle}>⚠️ Confirmation des informations</h3>
+            <p style={styles.modalText}>
+              Êtes-vous complètement sûr que les informations saisies pour ce billet sont vraies et correctes ?
+            </p>
+
+            {/* Petit récapitulatif visuel des données saisies */}
+            <div style={styles.recapCard}>
+              <div><strong>Client :</strong> {nomClient}</div>
+              {telephoneClient && <div><strong>Téléphone :</strong> {telephoneClient}</div>}
+            </div>
+
+            <div style={styles.modalActions}>
+              <button onClick={() => setShowConfirmationModal(false)} style={styles.modalCancelBtn}>
+                Non, corriger
+              </button>
+              <button onClick={validerEtGenererBillet} style={styles.modalConfirmBtn}>
+                Oui, générer le billet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <footer style={styles.footer}>
         <p>© 2026 - Conçu et Sécurisé par <strong>ArtiSys (Art Life System)</strong>. Tous droits réservés.</p>
       </footer>
@@ -941,6 +981,28 @@ const styles = {
       color: '#eb860d', // Un petit effet orange au survol
     }
   },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    display: 'flex', justifyContent: 'center', alignItems: 'center',
+    zIndex: 1000,
+    backdropFilter: 'blur(4px)',
+  },
+  modalContent: {
+    backgroundColor: '#161b22',
+    border: '1px solid #30363d',
+    borderRadius: '12px',
+    padding: '24px',
+    maxWidth: '440px',
+    width: '90%',
+  },
+  modalTitle: { color: '#ffffff', margin: '0 0 10px 0', fontSize: '18px', fontWeight: 'bold' },
+  modalText: { color: '#c9d1d9', fontSize: '14px', lineHeight: '1.5', margin: '0 0 16px 0' },
+  recapCard: { backgroundColor: '#0d1117', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px', border: '1px solid #21262d' },
+  modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px' },
+  modalCancelBtn: { backgroundColor: '#21262d', color: '#c9d1d9', border: '1px solid #30363d', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer' },
+  modalConfirmBtn: { backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' },
   footer: {
     backgroundColor: '#0d1117',
     borderTop: '1px solid #21262d',
