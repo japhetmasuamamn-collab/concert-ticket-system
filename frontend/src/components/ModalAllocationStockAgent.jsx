@@ -1,6 +1,6 @@
 // src/components/ModalAllocationStockAgent.jsx
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Ticket, Layers, Loader2, CheckCircle, Edit2, Check, Plus, Minus, Briefcase } from 'lucide-react';
+import { X, User, Phone, Ticket, Layers, Loader2, CheckCircle, Edit2, Check, Plus, Minus, Briefcase, ShieldAlert, UserCheck, UserX } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config';
 
@@ -26,6 +26,7 @@ const ModalAllocationStockAgent = ({ agent: initialAgent, onClose, onAllocationR
   const [valeurNom, setValeurNom] = useState(initialAgent?.nom || '');
   const [valeurPhone, setValeurPhone] = useState(initialAgent?.telephone || '');
   const [updatingAgent, setUpdatingAgent] = useState(false);
+  const [toggleStatusLoading, setToggleStatusLoading] = useState(false);
 
   // Un dictionnaire pour stocker les quantités sélectionnées par catégorie { [catId]: quantite }
   const [allocations, setAllocations] = useState({});
@@ -80,6 +81,28 @@ const ModalAllocationStockAgent = ({ agent: initialAgent, onClose, onAllocationR
       setError("Erreur lors de la mise à jour des coordonnées de l'agent.");
     } finally {
       setUpdatingAgent(false);
+    }
+  };
+
+  // NOUVELLE FONCTION : Désactiver / Activer l'agent
+  const handleToggleStatusAgent = async () => {
+    if (!window.confirm(`Êtes-vous sûr de vouloir ${agent.actif ? 'désactiver' : 'réactiver'} le compte de cet agent ?`)) {
+      return;
+    }
+
+    setToggleStatusLoading(true);
+    setError('');
+    try {
+      const response = await axios.put(`${API_BASE_URL}/api/admin/agents/${agent.id}/toggle-status`);
+      
+      // On met à jour l'état de l'agent localement
+      setAgent(prev => ({ ...prev, actif: response.data.actif }));
+      
+      if (onAllocationReussie) onAllocationReussie(); // Rafraîchit la liste en arrière plan
+    } catch (err) {
+      setError("Erreur lors du changement de statut de l'agent.");
+    } finally {
+      setToggleStatusLoading(false);
     }
   };
 
@@ -268,7 +291,40 @@ const ModalAllocationStockAgent = ({ agent: initialAgent, onClose, onAllocationR
                   </div>
                 )}
               </div>
+
+              {/* STATUT BADGE DYNAMIQUE */}
+              <div style={styles.profileRow}>
+                <ShieldAlert size={14} color={agent.actif ? '#22c55e' : '#ef4444'} />
+                <span style={{ fontSize: '12px', color: agent.actif ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
+                  {agent.actif ? "Compte Actif" : "Compte Désactivé"}
+                </span>
+              </div>
             </div>
+
+            {/* ACTION DÉSACTIVATION / RÉACTIVATION */}
+            <button
+              type="button"
+              onClick={handleToggleStatusAgent}
+              disabled={toggleStatusLoading}
+              style={{
+                ...styles.toggleStatusBtn,
+                backgroundColor: agent.actif ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                border: agent.actif ? '1px solid #ef4444' : '1px solid #22c55e',
+                color: agent.actif ? '#f87171' : '#4ade80'
+              }}
+            >
+              {toggleStatusLoading ? (
+                <Loader2 size={14} style={styles.spinner} />
+              ) : agent.actif ? (
+                <>
+                  <UserX size={14} /> Désactiver le compte
+                </>
+              ) : (
+                <>
+                  <UserCheck size={14} /> Réactiver le compte
+                </>
+              )}
+            </button>
 
             {/* BLOC : PORTEFEUILLE ACTUEL DE L'AGENT */}
             <div style={styles.walletSection}>
@@ -421,7 +477,6 @@ const styles = {
   modalTitle: { fontSize: '16px', fontWeight: '700', color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' },
   closeModalBtn: { background: 'none', border: 'none', color: '#8b949e', cursor: 'pointer', padding: 0 },
   
-  // NOUVEAU LAYOUT DES COLONNES
   modalBodyLayout: { display: 'flex', width: '100%' },
   sidebarColumn: { display: 'flex', flexDirection: 'column', gap: '12px' },
   mainContentColumn: { display: 'flex', flexDirection: 'column' },
@@ -435,6 +490,9 @@ const styles = {
   inlineInput: { backgroundColor: '#1f242c', border: '1px solid #444c56', borderRadius: '4px', padding: '4px 6px', fontSize: '13px', color: '#fff', outline: 'none' },
   inlineSaveBtn: { backgroundColor: '#238636', border: 'none', color: '#fff', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' },
   
+  // NOUVEAU STYLE DU BOUTON DE CHANGEMENT DE STATUT
+  toggleStatusBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease', outline: 'none' },
+
   walletSection: { backgroundColor: '#090d13', border: '1px solid #21262d', borderBottomLeftRadius: '10px', borderBottomRightRadius: '10px', padding: '12px' },
   walletHeader: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' },
   walletTitle: { fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#8b949e', letterSpacing: '0.5px' },
