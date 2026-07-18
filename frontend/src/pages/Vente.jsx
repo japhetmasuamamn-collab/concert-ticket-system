@@ -4,6 +4,7 @@ import { LogOut, Ticket, User, Phone, CheckCircle2, ShieldCheck, Loader2, Refres
 import axios from 'axios';
 import API_BASE_URL from '../config'; 
 import HistoriqueVentes from '../components/HistoriqueVentes';
+import ModalChangementMdp from '../components/ModalChangementMdp';
 
 const Vente = () => {
   const navigate = useNavigate();
@@ -23,6 +24,8 @@ const Vente = () => {
   const [loadingVente, setLoadingVente] = useState(false);
   const [errorVente, setErrorVente] = useState('');
   const [successData, setSuccessData] = useState(null);
+
+  const [showMdpModal, setShowMdpModal] = useState(false); // État pour ouvrir/fermer la modal
 
   const [refreshHistoryTrigger, setRefreshHistoryTrigger] = useState(0);
 
@@ -420,6 +423,8 @@ const Vente = () => {
         </div>
       </main>
 
+      {showMdpModal && <ModalChangementMdp onClose={() => setShowMdpModal(false)} />}
+      
       <footer style={styles.footer}>
         <p>© 2026 - Conçu et Sécurisé par <strong>ArtiSys (Art Life System)</strong>. Tous droits réservés.</p>
       </footer>
@@ -914,6 +919,20 @@ const styles = {
     textAlign: 'center',
     marginTop: '20px',
     lineHeight: '1.5',
+  },
+  passwordTriggerBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#8b949e',
+    cursor: 'pointer',
+    padding: '6px',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'color 0.2s, background-color 0.2s',
+    '&:hover': {
+      color: '#eb860d', // Un petit effet orange au survol
+    }
   },
   footer: {
     backgroundColor: '#0d1117',
