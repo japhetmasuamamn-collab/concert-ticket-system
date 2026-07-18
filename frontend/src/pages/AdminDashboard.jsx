@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, Users, DollarSign, Ticket, LayoutDashboard, 
-  LogOut, RefreshCw, Loader2, UserPlus, X, Search, CheckCircle2, KeyRound, HelpCircle
+  LogOut, RefreshCw, Loader2, UserPlus, X, Search, CheckCircle2, KeyRound, HelpCircle, FileText
 } from 'lucide-react';
 import axios from 'axios';
 import API_BASE_URL from '../config';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 import DetailsVentesAgent from '../components/DetailsVentesAgent';
 import ModalGestionStock from '../components/ModalGestionStock';
@@ -44,6 +46,7 @@ const AdminDashboard = () => {
   const [categoriePourStock, setCategoriePourStock] = useState(null);
 
   const [isMdpModalOpen, setIsMdpModalOpen] = useState(false);
+  
 
   // Fonction unique de chargement de toutes les APIs en parallèle
   const chargerDonneesDashboard = async () => {
@@ -134,6 +137,78 @@ const AdminDashboard = () => {
     } finally {
       setModalLoading(false);
     }
+  };
+
+  const telechargerPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    
+    // 1. En-tête du document
+    doc.setFillColor(22, 27, 34); // Fond sombre comme ton application
+    doc.rect(0, 0, 297, 35, 'F');
+    
+    doc.setTextColor(239, 68, 68); // Rouge de ton thème (#ef4444)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text("REGISTRE DES ACHETEURS (BILLETS PAYÉS)", 14, 18);
+    
+    doc.setTextColor(139, 148, 158); // Gris sous-titre
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    const dateExport = new Date().toLocaleString('fr-FR');
+    doc.text(`Exporté le : ${dateExport} | Total : ${clientsFiltres.length} clients`, 14, 26);
+
+    // 2. Préparation des données pour le tableau
+    const colonnes = [
+      "Date d'achat", 
+      "Acheteur", 
+      "Contact", 
+      "Type de Billet", 
+      "Prix", 
+      "Vendu par", 
+      "Statut Porte"
+    ];
+
+    const lignes = clientsFiltres.map(client => [
+      new Date(client.date_achat).toLocaleDateString('fr-FR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      }),
+      client.nom_client,
+      client.telephone_client || "N/A",
+      client.categorie_billet,
+      `${client.prix_paye} USD`,
+      client.vendu_par || "En ligne",
+      client.statut_scan ? "Non scanné" : "Scanné"
+    ]);
+
+    // 3. Dessiner le tableau avec jspdf-autotable
+    // 3. Dessiner le tableau en appelant directement autoTable
+    autoTable(doc, {
+      startY: 42,
+      head: [colonnes],
+      body: lignes,
+      theme: 'striped',
+      headStyles: { 
+        fillColor: [22, 27, 34], 
+        textColor: [255, 255, 255], 
+        fontStyle: 'bold',
+        lineColor: [48, 54, 61],
+        lineWidth: 0.1
+      },
+      bodyStyles: { 
+        textColor: [33, 37, 41],
+        fontSize: 9 
+      },
+      alternateRowStyles: { 
+        fillColor: [246, 248, 250] 
+      },
+      columnStyles: {
+        4: { fontStyle: 'bold', textColor: [34, 197, 94] } // Met le prix en vert gras
+      },
+      margin: { top: 40, left: 14, right: 14 }
+    });
+
+    // 4. Téléchargement du fichier
+    doc.save(`Registre_Clients_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   return (
@@ -416,16 +491,43 @@ const AdminDashboard = () => {
               </button>
             </div>
 
-            {/* Barre de recherche */}
-            <div style={styles.searchBarContainer}>
-              <Search size={18} style={styles.searchIcon} />
-              <input 
-                type="text" 
-                placeholder="Rechercher par nom, téléphone, catégorie de billet..."
-                value={rechercheClient}
-                onChange={(e) => setRechercheClient(e.target.value)}
-                style={styles.searchInput}
-              />
+            {/* Barre de recherche et Bouton PDF sur la même ligne */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
+              <div style={{ ...styles.searchBarContainer, flex: 1, marginBottom: 0 }}>
+                <Search size={18} style={styles.searchIcon} />
+                <input 
+                  type="text" 
+                  placeholder="Rechercher par nom, téléphone, catégorie de billet..."
+                  value={rechercheClient}
+                  onChange={(e) => setRechercheClient(e.target.value)}
+                  style={styles.searchInput}
+                />
+              </div>
+              
+              {/* BOUTON EXPORTER PDF */}
+              <button 
+                onClick={telechargerPDF}
+                disabled={clientsLoading || clientsFiltres.length === 0}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: clientsFiltres.length === 0 ? '#21262d' : '#ef4444',
+                  color: clientsFiltres.length === 0 ? '#8b949e' : '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  cursor: clientsFiltres.length === 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'background-color 0.2s',
+                  height: '42px'
+                }}
+                title="Télécharger la liste filtrée au format PDF"
+              >
+                <FileText size={18} />
+                Exporter PDF
+              </button>
             </div>
 
             {/* Corps de la liste avec défilement */}
@@ -470,11 +572,11 @@ const AdminDashboard = () => {
                         <td style={styles.td}>
                           {client.statut_scan ? (
                             <span style={{...styles.badgeSuccess, display: 'inline-flex', alignItems: 'center', gap: '4px'}}>
-                              <CheckCircle2 size={12} /> Scanné
+                              <CheckCircle2 size={12} /> Non scanné
                             </span>
                           ) : (
                             <span style={{...styles.badgePending, display: 'inline-flex', alignItems: 'center', gap: '4px'}}>
-                              <HelpCircle size={12} /> Non scanné
+                              <HelpCircle size={12} /> Scanné
                             </span>
                           )}
                         </td>
@@ -485,6 +587,7 @@ const AdminDashboard = () => {
               )}
             </div>
 
+            {/* Pied de la modal avec le total et les actions */}
             <div style={styles.modalActions}>
               <span style={{ color: '#8b949e', fontSize: '13px', marginRight: 'auto', alignSelf: 'center' }}>
                 Total : {clientsFiltres.length} acheteur(s) trouvé(s)
