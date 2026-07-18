@@ -206,24 +206,70 @@ def lister_categories_avec_stocks(db: Session = Depends(get_db)):
 @app.get("/api/admin/agents", tags=["Administration"])
 def performance_des_agents(db: Session = Depends(get_db)):
     """
-    Récupère la liste des agents (vendeurs) avec leur volume de billets émis et la caisse attendue.
+    Récupère la liste des agents avec leurs performances de vente
+    et leur portefeuille de stock RÉELLEMENT restant (Alloué - Vendu).
     """
     agents = db.query(models.Utilisateur).filter(models.Utilisateur.role == "agent").all()
     resultat = []
 
     for agent in agents:
+        # 1. Logique existante : Toutes les ventes de l'agent
         billets_agent = db.query(models.Billet).filter(models.Billet.agent_id == agent.id).all()
         total_encaisse = sum(b.type_billet.prix for b in billets_agent if b.type_billet)
 
+        # 2. Récupération des allocations initiales de l'agent
+        allocations_db = db.query(models.AllocationStock).filter(
+            models.AllocationStock.agent_id == agent.id
+        ).all()
+
+        portefeuille_allocations = []
+        for alloc in allocations_db:
+            # CORRECTION ICI : b.type_billet_id au lieu de b.categorie_billet_id
+            nb_vendus_pour_cette_cat = sum(
+                1 for b in billets_agent if b.type_billet_id == alloc.categorie_billet_id
+            )
+
+            # Calcul du stock réel restant en main
+            stock_restant = alloc.quantite - nb_vendus_pour_cette_cat
+            stock_restant = max(0, stock_restant)
+
+            portefeuille_allocations.append({
+                "id": alloc.id,
+                "categorie_billet_id": alloc.categorie_billet_id,
+                "quantite": stock_restant,  
+                "categorie": {
+                    "nom_type": alloc.type_billet.nom_type if alloc.type_billet else f"Type #{alloc.categorie_billet_id}"
+                }
+            })
+
+        # 3. Assemblage final
         resultat.append({
             "id": agent.id,
             "nom": agent.nom,
-            "telephone" : agent.telephone,
+            "telephone": agent.telephone,
             "billets_vendus": len(billets_agent),
-            "total_encaisse": float(total_encaisse)
+            "total_encaisse": float(total_encaisse),
+            "allocations": portefeuille_allocations  
         })
 
     return resultat
+
+# Assure-toi que le chemin ici correspond parfaitement à ton axios.put
+@app.put("/api/admin/agents/{agent_id}")
+def modifier_agent(agent_id: int, agent_data: dict, db: Session = Depends(get_db)):
+    # 1. Chercher l'agent
+    agent = db.query(models.Utilisateur).filter(models.Utilisateur.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent non trouvé")
+    
+    # 2. Mettre à jour les champs
+    agent.nom = agent_data.get("nom", agent.nom)
+    agent.telephone = agent_data.get("telephone", agent.telephone)
+    
+    # 3. Sauvegarder
+    db.commit()
+    db.refresh(agent)
+    return agent
 
 
 
@@ -771,3 +817,86 @@ def modifier_mon_mot_de_passe(
     db.commit()
     
     return {"status": "success", "message": "Votre mot de passe a été modifié avec succès."}
+
+
+
+@app.post("/api/admin/agents/allouer-stock", tags=["Administration"], response_model=schemas.AllocationStockResponse)
+def allouer_stock_agent(payload: schemas.AllocationStockCreate, db: Session = Depends(get_db)):
+    """
+    Attribue ou incrémente une quantité spécifique de billets pour un agent donné
+    après vérification du stock réel disponible au niveau global.
+    """
+    # 1. Vérification de l'existence de l'agent
+    agent = db.query(models.Utilisateur).filter(
+        models.Utilisateur.id == payload.agent_id, 
+        models.Utilisateur.role == "agent"
+    ).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent introuvable.")
+
+    # 2. Vérification de l'existence de la catégorie de billet
+    type_billet = db.query(models.TypeBillet).filter(models.TypeBillet.id == payload.categorie_billet_id).first()
+    if not type_billet:
+        raise HTTPException(status_code=404, detail="Catégorie de billet introuvable.")
+
+    # 3. Calcul du stock réel restant global (Quantité Max - Quantités déjà allouées aux agents)
+    from sqlalchemy import func
+
+    # On fait la somme de toutes les quantités allouées à TOUS les agents pour cette catégorie
+    total_alloue = db.query(func.sum(models.AllocationStock.quantite)).filter(
+        models.AllocationStock.categorie_billet_id == payload.categorie_billet_id
+    ).scalar() or 0
+
+    # Le stock réellement disponible pour une nouvelle allocation
+    stock_restant_reel = type_billet.quantite_max - total_alloue
+    
+    if payload.quantite > stock_restant_reel:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Stock insuffisant pour {type_billet.nom_type}. Restant distribuable : {stock_restant_reel}."
+        )
+
+    # 4. Enregistrement ou mise à jour du portefeuille de l'agent
+    allocation_existante = db.query(models.AllocationStock).filter(
+        models.AllocationStock.agent_id == payload.agent_id,
+        models.AllocationStock.categorie_billet_id == payload.categorie_billet_id
+    ).first()
+
+    if allocation_existante:
+        # L'agent possède déjà un lot de cette catégorie, on incrémente sa dotation
+        allocation_existante.quantite += payload.quantite
+        db.commit()
+        db.refresh(allocation_existante)
+        return allocation_existante
+    else:
+        # Premier lot de cette catégorie affecté à cet agent
+        nouvelle_allocation = models.AllocationStock(
+            agent_id=payload.agent_id,
+            categorie_billet_id=payload.categorie_billet_id,
+            quantite=payload.quantite
+        )
+        db.add(nouvelle_allocation)
+        db.commit()
+        db.refresh(nouvelle_allocation)
+        return nouvelle_allocation
+    
+
+@app.get("/api/admin/agents/allocations-globales", tags=["Administration"])
+def obtenir_allocations_globales(db: Session = Depends(get_db)):
+    """
+    Retourne la somme de toutes les quantités allouées à tous les agents,
+    groupée par catégorie de billet.
+    Format de sortie : { "1": 4, "2": 0, ... }
+    """
+    from sqlalchemy import func
+    
+    # Récupère la somme des allocations groupée par catégorie
+    allocations_groupes = db.query(
+        models.AllocationStock.categorie_billet_id,
+        func.sum(models.AllocationStock.quantite).label("total")
+    ).group_by(models.AllocationStock.categorie_billet_id).all()
+    
+    # On formate le résultat en un dictionnaire clé-valeur simple { id: total }
+    resultat = {str(item.categorie_billet_id): item.total for item in allocations_groupes}
+    
+    return resultat
